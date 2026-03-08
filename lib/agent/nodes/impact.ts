@@ -14,7 +14,7 @@ export async function impactTrackerNode(
 ): Promise<Partial<SedekahState>> {
   const { recommendation, paymentStatus, donorIntent } = state;
 
-  if (paymentStatus !== "paid" || !recommendation) {
+  if (!recommendation) {
     return {
       messages: [
         new AIMessage({
@@ -25,9 +25,10 @@ export async function impactTrackerNode(
     };
   }
 
-  // Generate impact report berdasarkan alokasi
+  const isPaid = paymentStatus === "paid";
+
+  // Generate impact report berdasarkan alokasi (projected atau confirmed)
   const items: ImpactItem[] = recommendation.allocations.map((alloc) => {
-    // Estimate beneficiaries berdasarkan amount dan kategori
     const beneficiaries = estimateBeneficiaries(
       alloc.amount,
       alloc.campaignName,
@@ -65,7 +66,9 @@ export async function impactTrackerNode(
     ayat,
   };
 
-  const message = buildImpactMessage(impactReport);
+  const message = isPaid
+    ? buildImpactMessage(impactReport)
+    : buildProjectedImpactMessage(impactReport);
 
   return {
     messages: [new AIMessage({ content: message, name: "IMPACT_TRACKER" })],
@@ -166,6 +169,30 @@ function buildImpactMessage(report: ImpactReport): string {
   lines.push(`\n📖 ${report.ayat}`);
   lines.push(
     `\n_Semoga Allah melipatgandakan kebaikan Anda. Jazakallahu khairan._ ✨`,
+  );
+
+  return lines.join("\n");
+}
+
+function buildProjectedImpactMessage(report: ImpactReport): string {
+  const lines: string[] = [
+    `✨ **Insya Allah, Inilah Dampak Donasi Anda**\n`,
+    `_Setelah pembayaran dikonfirmasi, donasi Anda akan memberikan dampak berikut:_\n`,
+    `💰 Total donasi: **${formatRupiah(report.totalDonated)}**`,
+    `⭐ Proyeksi Impact Score: **${report.impactScore}/100**\n`,
+  ];
+
+  for (const item of report.items) {
+    lines.push(
+      `📦 **${item.category}**: ${formatRupiah(item.amount)}\n   → ${item.description}\n`,
+    );
+  }
+
+  lines.push(`---`);
+  lines.push(`\n🤲 ${report.reflectionMessage}`);
+  lines.push(`\n📖 ${report.ayat}`);
+  lines.push(
+    `\n_Silakan selesaikan pembayaran melalui link yang telah diberikan. Kami akan mengonfirmasi setelah pembayaran diterima._ 🤲`,
   );
 
   return lines.join("\n");

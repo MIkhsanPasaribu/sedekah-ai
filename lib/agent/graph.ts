@@ -104,16 +104,13 @@ function routeAfterApproval(state: SedekahState): string {
 }
 
 /**
- * Router after PAYMENT_EXECUTOR: if paid, go to IMPACT_TRACKER.
+ * Router after PAYMENT_EXECUTOR: always go to IMPACT_TRACKER to show projected/confirmed impact.
  */
 function routeAfterPayment(state: SedekahState): string {
-  if (state.paymentStatus === "paid") {
-    return "IMPACT_TRACKER";
-  }
   if (state.paymentStatus === "failed") {
     return END;
   }
-  return END; // pending — wait for webhook
+  return "IMPACT_TRACKER"; // Show projected impact even if still "pending"
 }
 
 // ---------- Latency Instrumentation ----------

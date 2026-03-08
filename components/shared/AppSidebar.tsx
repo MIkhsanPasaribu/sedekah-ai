@@ -3,12 +3,15 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import {
   MessageSquare,
   LayoutDashboard,
   Heart,
   LogOut,
   ChevronUp,
+  Plus,
+  Clock,
 } from "lucide-react";
 import { signOut } from "@/app/(auth)/login/actions";
 import {
@@ -43,8 +46,29 @@ interface AppSidebarProps {
   userEmail: string | null;
 }
 
+interface ConversationItem {
+  threadId: string;
+  title: string;
+  updatedAt: string;
+}
+
 export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
   const pathname = usePathname();
+  const [conversations, setConversations] = useState<ConversationItem[]>([]);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch("/api/conversations");
+        if (!res.ok) return;
+        const data = await res.json();
+        setConversations(data.conversations ?? []);
+      } catch {
+        // Non-fatal
+      }
+    }
+    load();
+  }, [pathname]);
 
   const initials = userName
     ? userName
@@ -108,6 +132,50 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Conversation History */}
+        {conversations.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider">
+              <Clock className="mr-1 inline size-3" />
+              Riwayat Chat
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/chat" />}
+                    tooltip="Percakapan Baru"
+                  >
+                    <Plus className="size-4" />
+                    <span>Percakapan Baru</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                {conversations.map((conv) => {
+                  const threadUrl = `/chat?thread=${encodeURIComponent(conv.threadId)}`;
+                  const isActive =
+                    pathname === "/chat" &&
+                    typeof window !== "undefined" &&
+                    new URLSearchParams(window.location.search).get(
+                      "thread",
+                    ) === conv.threadId;
+                  return (
+                    <SidebarMenuItem key={conv.threadId}>
+                      <SidebarMenuButton
+                        render={<Link href={threadUrl} />}
+                        isActive={isActive}
+                        tooltip={conv.title}
+                      >
+                        <MessageSquare className="size-4 shrink-0" />
+                        <span className="truncate">{conv.title}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">

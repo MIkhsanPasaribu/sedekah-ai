@@ -101,33 +101,60 @@ export async function paymentExecutorNode(
   const invoiceId: string = parsed.invoiceId;
 
   // Simpan donation record ke DB agar webhook bisa match
+  // Satu record per alokasi kampanye (bukan hanya yang pertama)
   try {
     const dbUser = await prisma.user.findUnique({ where: { email } });
     if (dbUser) {
-      const firstAlloc = recommendation.allocations[0];
-      await prisma.donation.create({
-        data: {
-          userId: dbUser.id,
-          amount: totalAmount,
-          type: state.donorIntent?.startsWith("zakat_fitrah")
-            ? "zakat_fitrah"
-            : state.donorIntent?.startsWith("zakat")
-              ? "zakat_mal"
-              : state.donorIntent === "wakaf"
-                ? "wakaf"
-                : state.donorIntent === "infaq"
-                  ? "infaq"
-                  : state.donorIntent === "bencana"
-                    ? "bencana"
-                    : "sedekah",
-          donorIntent: state.donorIntent,
-          campaignId: firstAlloc?.campaignId ?? null,
-          mayarInvoiceId: invoiceId,
-          mayarPaymentLink: paymentLink,
-          status: "pending",
-          islamicContext: recommendation.islamicContext ?? null,
-        },
-      });
+      const donationType = state.donorIntent?.startsWith("zakat_fitrah")
+        ? "zakat_fitrah"
+        : state.donorIntent?.startsWith("zakat")
+          ? "zakat_mal"
+          : state.donorIntent === "wakaf"
+            ? "wakaf"
+            : state.donorIntent === "infaq"
+              ? "infaq"
+              : state.donorIntent === "bencana"
+                ? "bencana"
+                : "sedekah";
+
+      const allocations = recommendation.allocations;
+
+      if (allocations.length <= 1) {
+        // Single allocation — simpan satu record
+        const firstAlloc = allocations[0];
+        await prisma.donation.create({
+          data: {
+            userId: dbUser.id,
+            amount: totalAmount,
+            type: donationType,
+            donorIntent: state.donorIntent,
+            campaignId: firstAlloc?.campaignId ?? null,
+            mayarInvoiceId: invoiceId,
+            mayarPaymentLink: paymentLink,
+            status: "pending",
+            islamicContext: recommendation.islamicContext ?? null,
+          },
+        });
+      } else {
+        // Multi-campaign: satu Donation per alokasi, semua share invoiceId yang sama
+        await prisma.$transaction(
+          allocations.map((alloc) =>
+            prisma.donation.create({
+              data: {
+                userId: dbUser.id,
+                amount: alloc.amount,
+                type: donationType,
+                donorIntent: state.donorIntent,
+                campaignId: alloc.campaignId,
+                mayarInvoiceId: invoiceId,
+                mayarPaymentLink: paymentLink,
+                status: "pending",
+                islamicContext: recommendation.islamicContext ?? null,
+              },
+            }),
+          ),
+        );
+      }
     }
   } catch (dbError) {
     // Non-fatal: payment can still proceed even if DB save fails

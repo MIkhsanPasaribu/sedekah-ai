@@ -50,6 +50,12 @@ enum FraudSeverity {
   critical
 }
 
+enum MessageRole {
+  user
+  assistant
+  system
+}
+
 // ===== MODELS =====
 
 model User {
@@ -63,8 +69,9 @@ model User {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  donations     Donation[]
-  givingJourney GivingJourney[]
+  donations      Donation[]
+  givingJourney  GivingJourney[]
+  conversations  Conversation[]
 
   @@map("users")
 }
@@ -150,4 +157,33 @@ model GivingJourney {
   @@unique([userId, ramadhanDay])
   @@index([userId])
   @@map("giving_journey")
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  userId    String
+  threadId  String   @unique
+  title     String   @default("Percakapan Baru")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([userId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String      @id @default(uuid())
+  conversationId String
+  role           MessageRole
+  content        String
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("messages")
 }

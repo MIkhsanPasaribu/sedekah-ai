@@ -33,15 +33,25 @@ interface AgentState {
   invoiceId: string | null;
 }
 
+interface ChatInterfaceProps {
+  initialThreadId?: string | null;
+  onThreadChange?: (threadId: string) => void;
+}
+
 /** Interval polling status pembayaran (ms) */
 const POLL_INTERVAL = 5_000;
 /** Batas waktu polling sebelum timeout (ms) — 10 menit */
 const POLL_TIMEOUT = 10 * 60 * 1_000;
 
-export function ChatInterface() {
+export function ChatInterface({
+  initialThreadId,
+  onThreadChange,
+}: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [threadId, setThreadId] = useState<string | null>(null);
+  const [threadId, setThreadId] = useState<string | null>(
+    initialThreadId ?? null,
+  );
   const [agentState, setAgentState] = useState<AgentState>({
     donorIntent: null,
     zakatBreakdown: null,
@@ -52,6 +62,8 @@ export function ChatInterface() {
     invoiceId: null,
   });
   const [showMuhasabah, setShowMuhasabah] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [nodeProgress, setNodeProgress] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pollStartRef = useRef<number | null>(null);
 
@@ -64,6 +76,63 @@ export function ChatInterface() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
+
+  // ------ Load Conversation History ------
+  useEffect(() => {
+    if (!initialThreadId) return;
+
+    async function loadHistory() {
+      setIsLoadingHistory(true);
+      try {
+        const res = await fetch(
+          `/api/conversations/${encodeURIComponent(initialThreadId!)}/messages`,
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const loadedMessages: Message[] = data.messages.map(
+          (m: {
+            id: string;
+            role: string;
+            content: string;
+            createdAt: string;
+          }) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            timestamp: new Date(m.createdAt),
+          }),
+        );
+        setMessages(loadedMessages);
+
+        // Restore agent state dari metadata pesan assistant terakhir
+        const lastAssistant = [...data.messages]
+          .reverse()
+          .find(
+            (m: { role: string; metadata: unknown }) =>
+              m.role === "assistant" && m.metadata,
+          );
+        if (lastAssistant?.metadata) {
+          const meta = lastAssistant.metadata as Record<string, unknown>;
+          setAgentState({
+            donorIntent: (meta.donorIntent as string) ?? null,
+            zakatBreakdown: (meta.zakatBreakdown as ZakatBreakdown) ?? null,
+            recommendation: (meta.recommendation as Recommendation) ?? null,
+            mayarInvoiceLink: (meta.mayarInvoiceLink as string) ?? null,
+            paymentStatus: (meta.paymentStatus as string) ?? null,
+            impactReport: (meta.impactReport as ImpactReport) ?? null,
+            invoiceId: (meta.invoiceId as string) ?? null,
+          });
+        }
+      } catch {
+        // Non-fatal: jika gagal load history, mulai fresh
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    }
+
+    loadHistory();
+  }, [initialThreadId]);
 
   // ------ Payment Status Polling ------
   // Setelah invoice dibuat (invoiceId tersedia dan status "pending"),
@@ -153,6 +222,7 @@ export function ChatInterface() {
 
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
+    setNodeProgress(null);
 
     try {
       const response = await fetch("/api/agent", {
@@ -168,36 +238,73 @@ export function ChatInterface() {
         }),
       });
 
-      const data = await response.json();
-
-      if (data.success) {
-        // Persist threadId for conversation continuity
-        if (data.threadId) setThreadId(data.threadId);
-
-        const assistantMessage: Message = {
-          id: `ai-${Date.now()}`,
-          role: "assistant",
-          content: data.message,
-          timestamp: new Date(),
-        };
-
-        setMessages((prev) => [...prev, assistantMessage]);
-
-        // Update agent state
-        if (data.state) {
-          setAgentState((prev) => ({
-            ...prev,
-            ...data.state,
-          }));
-        }
-      } else {
+      if (!response.ok || !response.body) {
+        // Fallback: try parsing as JSON error
+        const errData = await response.json().catch(() => null);
         const errorMessage: Message = {
           id: `error-${Date.now()}`,
           role: "assistant",
-          content: data.error ?? "Maaf, terjadi kendala. Silakan coba lagi. 🤲",
+          content:
+            errData?.error ?? "Maaf, terjadi kendala. Silakan coba lagi. 🤲",
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errorMessage]);
+        return;
+      }
+
+      // Parse SSE stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        // Keep the last (potentially incomplete) line in the buffer
+        buffer = lines.pop() ?? "";
+
+        let eventType = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ") && eventType) {
+            const data = JSON.parse(line.slice(6));
+
+            if (eventType === "thread" && data.threadId) {
+              setThreadId(data.threadId);
+              onThreadChange?.(data.threadId);
+            } else if (eventType === "node") {
+              setNodeProgress(data.label ?? data.node);
+            } else if (eventType === "result" && data.success) {
+              setNodeProgress(null);
+              const assistantMessage: Message = {
+                id: `ai-${Date.now()}`,
+                role: "assistant",
+                content: data.message,
+                timestamp: new Date(),
+              };
+              setMessages((prev) => [...prev, assistantMessage]);
+
+              if (data.state) {
+                setAgentState((prev) => ({ ...prev, ...data.state }));
+              }
+            } else if (eventType === "error") {
+              setNodeProgress(null);
+              const errorMessage: Message = {
+                id: `error-${Date.now()}`,
+                role: "assistant",
+                content:
+                  data.error ?? "Maaf, terjadi kendala. Silakan coba lagi. 🤲",
+                timestamp: new Date(),
+              };
+              setMessages((prev) => [...prev, errorMessage]);
+            }
+            eventType = "";
+          }
+        }
       }
     } catch {
       const errorMessage: Message = {
@@ -209,6 +316,7 @@ export function ChatInterface() {
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+      setNodeProgress(null);
     }
   }
 
@@ -218,7 +326,7 @@ export function ChatInterface() {
   }
 
   function handleEditAllocation(): void {
-    // Reset conversation agar user bisa ubah dari awal
+    // Reset dan buat thread baru untuk konverasi baru
     setThreadId(null);
     setAgentState({
       donorIntent: null,
@@ -232,7 +340,22 @@ export function ChatInterface() {
     sendMessage("Saya ingin mengubah alokasi donasi");
   }
 
-  const showQuickActions = messages.length === 0;
+  /** Reset chat untuk memulai percakapan baru */
+  function startNewChat(): void {
+    setThreadId(null);
+    setMessages([]);
+    setAgentState({
+      donorIntent: null,
+      zakatBreakdown: null,
+      recommendation: null,
+      mayarInvoiceLink: null,
+      paymentStatus: null,
+      impactReport: null,
+      invoiceId: null,
+    });
+  }
+
+  const showQuickActions = messages.length === 0 && !isLoadingHistory;
   const showZakatBreakdown =
     agentState.zakatBreakdown !== null &&
     agentState.zakatBreakdown.totalKewajiban > 0;
@@ -251,6 +374,12 @@ export function ChatInterface() {
     <div className="flex h-[calc(100vh-4rem)] flex-col bg-surface-warm md:h-screen">
       {/* Messages Area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto scroll-smooth">
+        {isLoadingHistory && (
+          <div className="mx-auto max-w-3xl px-4 py-8 text-center">
+            <IslamicLoadingSpinner message="Memuat riwayat percakapan..." />
+          </div>
+        )}
+
         {showQuickActions && <QuickActions onSelect={sendMessage} />}
 
         {messages.map((msg) => (
@@ -263,7 +392,16 @@ export function ChatInterface() {
         ))}
 
         {isLoading && !showIslamicSpinner && (
-          <MessageBubble role="assistant" content="" isLoading />
+          <div className="mx-auto max-w-3xl px-4 py-4">
+            {nodeProgress ? (
+              <div className="flex items-center gap-3 rounded-xl bg-white/80 px-4 py-3 w-fit shadow-sm">
+                <div className="h-2 w-2 animate-pulse rounded-full bg-brand-green-mid" />
+                <span className="text-sm text-ink-mid">{nodeProgress}</span>
+              </div>
+            ) : (
+              <MessageBubble role="assistant" content="" isLoading />
+            )}
+          </div>
         )}
 
         {showIslamicSpinner && (
