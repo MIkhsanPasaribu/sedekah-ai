@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Navbar } from "@/components/shared/Navbar";
 import { ChatInterface } from "@/components/chat/ChatInterface";
 
 export const metadata = {
@@ -19,12 +18,5 @@ export default async function ChatPage() {
     redirect("/login?redirectTo=/chat");
   }
 
-  return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
-      <div className="flex-1">
-        <ChatInterface />
-      </div>
-    </div>
-  );
+  return <ChatInterface />;
 }

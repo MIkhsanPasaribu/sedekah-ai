@@ -1,8 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { NavbarClient } from "./NavbarClient";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/shared/AppSidebar";
+import { MobileBottomNav } from "@/components/shared/MobileBottomNav";
 
-export async function Navbar() {
+export default async function AppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -13,7 +19,6 @@ export async function Navbar() {
 
   if (user) {
     email = user.email ?? null;
-    // Coba ambil nama dari database Prisma
     const dbUser = await prisma.user.findUnique({
       where: { authId: user.id },
       select: { name: true, email: true },
@@ -27,5 +32,13 @@ export async function Navbar() {
     }
   }
 
-  return <NavbarClient userName={displayName} userEmail={email} />;
+  return (
+    <SidebarProvider>
+      <AppSidebar userName={displayName} userEmail={email} />
+      <SidebarInset className="min-h-screen">
+        <main className="flex-1 pb-16 md:pb-0">{children}</main>
+      </SidebarInset>
+      <MobileBottomNav />
+    </SidebarProvider>
+  );
 }

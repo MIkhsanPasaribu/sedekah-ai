@@ -1,4 +1,3 @@
-import { Navbar } from "@/components/shared/Navbar";
 import { CampaignCard } from "@/components/campaigns/CampaignCard";
 import { CampaignFilter } from "@/components/campaigns/CampaignFilter";
 import { prisma } from "@/lib/prisma";
@@ -48,15 +47,13 @@ export default async function CampaignsPage({
 
   return (
     <div className="min-h-screen bg-surface-warm">
-      <Navbar />
-
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-ink-black sm:text-3xl">
+        <div className="mb-6">
+          <h1 className="text-2xl font-heading font-bold text-ink-black sm:text-3xl">
             Kampanye Terverifikasi 🛡️
           </h1>
-          <p className="mt-1 text-ink-mid">
+          <p className="mt-1 text-sm text-ink-mid">
             Setiap kampanye telah dianalisis oleh Fraud Shield AI untuk keamanan
             donasi Anda.
           </p>

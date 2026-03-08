@@ -106,7 +106,7 @@ export function CampaignDetailCard({
           </div>
           <div className="h-3 w-full overflow-hidden rounded-full bg-ink-ghost">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-brand-green-deep to-brand-green-light transition-all duration-700"
+              className="h-full rounded-full bg-linear-to-r from-brand-green-deep to-brand-green-light transition-all duration-700"
               style={{ width: `${Math.min(percentage, 100)}%` }}
             />
           </div>

@@ -1,5 +1,5 @@
 import { formatRupiah } from "@/lib/utils";
-import { Card, CardContent } from "@/components/shared/Card";
+import { Card, CardContent } from "@/components/ui/card";
 import { TrendingUp, Heart, Users, Target } from "lucide-react";
 
 interface StatCardProps {
@@ -27,12 +27,12 @@ export function StatCard({
   const Icon = ICONS[icon];
 
   return (
-    <Card hover>
+    <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
       <CardContent>
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-ink-mid">{title}</p>
-            <p className="mt-1 text-2xl font-bold text-ink-black">
+            <p className="mt-1 text-2xl font-heading font-bold text-ink-black">
               {typeof value === "number" ? formatRupiah(value) : value}
             </p>
             {subtitle && (

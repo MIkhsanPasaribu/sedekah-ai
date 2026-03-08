@@ -10,7 +10,11 @@ import { ZakatBreakdownCard } from "./ZakatBreakdownCard";
 import { PostPaymentReflection } from "./PostPaymentReflection";
 import { MuhasabahModal } from "@/components/shared/MuhasabahModal";
 import { IslamicLoadingSpinner } from "@/components/shared/IslamicLoadingSpinner";
-import type { Recommendation, ImpactReport, ZakatBreakdown } from "@/lib/agent/state";
+import type {
+  Recommendation,
+  ImpactReport,
+  ZakatBreakdown,
+} from "@/lib/agent/state";
 
 interface Message {
   id: string;
@@ -244,7 +248,7 @@ export function ChatInterface() {
     agentState.impactReport && agentState.paymentStatus === "paid";
 
   return (
-    <div className="flex h-full flex-col bg-surface-warm">
+    <div className="flex h-[calc(100vh-4rem)] flex-col bg-surface-warm md:h-screen">
       {/* Messages Area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto scroll-smooth">
         {showQuickActions && <QuickActions onSelect={sendMessage} />}
@@ -263,41 +267,54 @@ export function ChatInterface() {
         )}
 
         {showIslamicSpinner && (
-          <IslamicLoadingSpinner message="Sedang menyiapkan invoice pembayaran Anda..." />
+          <div className="mx-auto max-w-3xl px-4 py-4">
+            <IslamicLoadingSpinner message="Sedang menyiapkan invoice pembayaran Anda..." />
+          </div>
         )}
 
-        {/* Zakat Breakdown Card — muncul setelah kalkulasi selesai */}
+        {/* Zakat Breakdown Card */}
         {showZakatBreakdown && agentState.zakatBreakdown && (
-          <ZakatBreakdownCard breakdown={agentState.zakatBreakdown} />
+          <div className="mx-auto max-w-3xl px-4 py-2">
+            <ZakatBreakdownCard breakdown={agentState.zakatBreakdown} />
+          </div>
         )}
 
         {/* Payment Approval Card */}
         {showPaymentApproval && agentState.recommendation && (
-          <PaymentApprovalCard
-            recommendation={agentState.recommendation}
-            onApprove={handleApprovePayment}
-            onEdit={handleEditAllocation}
-            isLoading={isLoading}
-          />
+          <div className="mx-auto max-w-3xl px-4 py-2">
+            <PaymentApprovalCard
+              recommendation={agentState.recommendation}
+              onApprove={handleApprovePayment}
+              onEdit={handleEditAllocation}
+              isLoading={isLoading}
+            />
+          </div>
         )}
 
         {/* Post-Payment Spiritual Reflection */}
         {showPostPaymentReflection && agentState.recommendation && (
-          <PostPaymentReflection
-            amount={agentState.recommendation.totalAmount}
-            donorIntent={agentState.donorIntent}
-            islamicContext={agentState.recommendation.islamicContext}
-          />
+          <div className="mx-auto max-w-3xl px-4 py-2">
+            <PostPaymentReflection
+              amount={agentState.recommendation.totalAmount}
+              donorIntent={agentState.donorIntent}
+              islamicContext={agentState.recommendation.islamicContext}
+            />
+          </div>
         )}
 
         {/* Impact Report Card */}
         {showImpactReport && agentState.impactReport && (
-          <ImpactCard report={agentState.impactReport} />
+          <div className="mx-auto max-w-3xl px-4 py-2">
+            <ImpactCard report={agentState.impactReport} />
+          </div>
         )}
       </div>
 
-      {/* Muhasabah Modal — refleksi spiritual pasca-donasi */}
-      <MuhasabahModal open={showMuhasabah} onClose={() => setShowMuhasabah(false)} />
+      {/* Muhasabah Modal */}
+      <MuhasabahModal
+        open={showMuhasabah}
+        onClose={() => setShowMuhasabah(false)}
+      />
 
       {/* Input Area */}
       <ChatInput

@@ -1,4 +1,3 @@
-import { Navbar } from "@/components/shared/Navbar";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { RamadhanHeatmap } from "@/components/dashboard/RamadhanHeatmap";
 import { DonationHistory } from "@/components/dashboard/DonationHistory";
@@ -85,11 +84,8 @@ export default async function DashboardPage() {
   // Daily nudge — pesan kontekstual per hari Ramadhan
   const today = new Date();
   const ramadhanDay =
-    today >= ramadhanStart &&
-    today <= new Date("2026-03-18")
-      ? Math.floor(
-          (today.getTime() - ramadhanStart.getTime()) / 86_400_000,
-        ) + 1
+    today >= ramadhanStart && today <= new Date("2026-03-18")
+      ? Math.floor((today.getTime() - ramadhanStart.getTime()) / 86_400_000) + 1
       : 0;
 
   const donatedToday = heatmapData.some(
@@ -179,18 +175,31 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-surface-warm">
-      <Navbar />
-
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-ink-black sm:text-3xl">
+          <h1 className="text-2xl font-heading font-bold text-ink-black sm:text-3xl">
             Assalamu&apos;alaikum, {dbUser?.name ?? "Dermawan"} 💚
           </h1>
-          <p className="mt-1 text-ink-mid">
+          <p className="mt-1 text-sm text-ink-mid">
             Pantau perjalanan kebaikan Anda di bulan penuh berkah.
           </p>
         </div>
+
+        {/* Daily Nudge — Pesan AI Harian */}
+        {dailyNudge && ramadhanDay > 0 && (
+          <div className="mb-6 rounded-xl border border-brand-gold-pale bg-brand-gold-ghost/60 p-4">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">{donatedToday ? "💚" : "🌙"}</span>
+              <div>
+                <p className="text-sm font-heading font-semibold text-brand-gold-deep">
+                  Hari ke-{ramadhanDay} Ramadhan
+                </p>
+                <p className="mt-1 text-sm text-ink-dark">{dailyNudge}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Stat Cards */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -220,27 +229,9 @@ export default async function DashboardPage() {
           />
         </div>
 
-        {/* Daily Nudge — Pesan AI Harian */}
-        {dailyNudge && ramadhanDay > 0 && (
-          <div className="mt-6 rounded-xl border border-brand-gold-pale bg-brand-gold-ghost p-4">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">{donatedToday ? "💚" : "🌙"}</span>
-              <div>
-                <p className="text-sm font-semibold text-brand-gold-deep">
-                  Hari ke-{ramadhanDay} Ramadhan
-                </p>
-                <p className="mt-1 text-sm text-ink-dark">{dailyNudge}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Streak Counter + Heatmap + Impact */}
-        <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <StreakCounter
-            streak={streak}
-            ramadhanDay={ramadhanDay}
-          />
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <StreakCounter streak={streak} ramadhanDay={ramadhanDay} />
           <RamadhanHeatmap data={heatmapData} streak={streak} />
           <ImpactSummary
             totalDonated={totalDonated}
@@ -251,12 +242,12 @@ export default async function DashboardPage() {
         </div>
 
         {/* Milestones */}
-        <div className="mt-8">
+        <div className="mt-6">
           <MilestoneGrid badges={milestones} />
         </div>
 
         {/* Donation History */}
-        <div className="mt-8">
+        <div className="mt-6 pb-4">
           <DonationHistory donations={donationHistory} />
         </div>
       </div>

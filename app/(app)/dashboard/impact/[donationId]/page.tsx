@@ -1,10 +1,9 @@
-import { Navbar } from "@/components/shared/Navbar";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { formatRupiah, formatTanggal } from "@/lib/utils";
 import { TrustScoreBadge } from "@/components/shared/TrustScoreBadge";
-import { Card, CardHeader, CardContent } from "@/components/shared/Card";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -69,8 +68,6 @@ export default async function ImpactDetailPage({
 
   return (
     <div className="min-h-screen bg-surface-warm">
-      <Navbar />
-
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
         {/* Back */}
         <Link
@@ -82,11 +79,11 @@ export default async function ImpactDetailPage({
         </Link>
 
         {/* Donation Detail */}
-        <Card>
-          <CardHeader>
+        <Card className="border border-ink-ghost bg-surface-white shadow-sm">
+          <CardHeader className="border-b border-ink-ghost px-6 py-4">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-xl font-bold text-ink-black">
+                <h1 className="text-xl font-bold font-heading text-ink-black">
                   Detail Donasi
                 </h1>
                 <p className="mt-1 text-sm text-ink-mid">
@@ -100,7 +97,7 @@ export default async function ImpactDetailPage({
             </div>
           </CardHeader>
 
-          <CardContent>
+          <CardContent className="px-6 py-4">
             <div className="space-y-6">
               {/* Amount */}
               <div className="rounded-xl bg-brand-green-ghost p-4 text-center">
@@ -141,7 +138,7 @@ export default async function ImpactDetailPage({
 
               {/* Impact Estimation (only for paid) */}
               {donation.status === "paid" && (
-                <div className="rounded-xl border border-brand-green-pale bg-gradient-to-b from-brand-green-ghost/50 to-surface-white p-4">
+                <div className="rounded-xl border border-brand-green-pale bg-linear-to-b from-brand-green-ghost/50 to-surface-white p-4">
                   <h3 className="text-sm font-bold text-ink-black mb-4">
                     🌱 Estimasi Dampak
                   </h3>

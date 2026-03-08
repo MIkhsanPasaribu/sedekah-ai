@@ -1,4 +1,3 @@
-import { Navbar } from "@/components/shared/Navbar";
 import { CampaignDetailCard } from "@/components/campaigns/CampaignDetailCard";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
@@ -46,8 +45,6 @@ export default async function CampaignDetailPage({
 
   return (
     <div className="min-h-screen bg-surface-warm">
-      <Navbar />
-
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
         <CampaignDetailCard
           id={campaign.id}

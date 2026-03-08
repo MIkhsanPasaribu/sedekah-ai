@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { formatRupiah, hitungPersentase } from "@/lib/utils";
 import { TrustScoreBadge } from "@/components/shared/TrustScoreBadge";
-import { Card, CardContent } from "@/components/shared/Card";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface CampaignCardProps {
   id: string;
@@ -48,7 +48,7 @@ export function CampaignCard({
 
   return (
     <Link href={`/campaigns/${id}`}>
-      <Card hover className="overflow-hidden">
+      <Card className="overflow-hidden transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
         {/* Category Banner */}
         <div className="flex items-center justify-between bg-brand-green-ghost px-4 py-2">
           <div className="flex items-center gap-1.5">
