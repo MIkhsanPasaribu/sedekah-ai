@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+@theme {
+  /* ===== BRAND GREEN ===== */
+  --color-brand-green-deep: #1b4332;
+  --color-brand-green-mid: #2d6a4f;
+  --color-brand-green-light: #40916c;
+  --color-brand-green-pale: #74c69d;
+  --color-brand-green-ghost: #d8f3dc;
+
+  /* ===== BRAND GOLD ===== */
+  --color-brand-gold-deep: #92620a;
+  --color-brand-gold-core: #c9a227;
+  --color-brand-gold-bright: #e8c55a;
+  --color-brand-gold-pale: #fdf3c4;
+  --color-brand-gold-ghost: #fffbeb;
+
+  /* ===== SURFACE ===== */
+  --color-surface-warm: #faf3e0;
+  --color-surface-cool: #f8fafc;
+  --color-surface-white: #ffffff;
+
+  /* ===== INK ===== */
+  --color-ink-black: #0f1923;
+  --color-ink-dark: #1e293b;
+  --color-ink-mid: #475569;
+  --color-ink-light: #94a3b8;
+  --color-ink-ghost: #cbd5e1;
+
+  /* ===== SEMANTIC ===== */
+  --color-success: #16a34a;
+  --color-success-light: #dcfce7;
+  --color-warning: #d97706;
+  --color-warning-light: #fef9c3;
+  --color-danger: #dc2626;
+  --color-danger-light: #fee2e2;
+  --color-info: #0284c7;
+  --color-info-light: #e0f2fe;
+
+  /* ===== TRUST SCORE ===== */
+  --color-trust-excellent: #16a34a;
+  --color-trust-good: #4ade80;
+  --color-trust-fair: #eab308;
+  --color-trust-caution: #f97316;
+  --color-trust-danger: #dc2626;
+
+  /* ===== FONTS ===== */
+  --font-heading: "Plus Jakarta Sans", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-arabic: "Amiri", serif;
+  --font-mono: "Geist Mono", monospace;
+}
+
+/* ===== BASE STYLES ===== */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--color-ink-dark);
+  background-color: var(--color-surface-warm);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+  color: var(--color-ink-black);
+}
+
+/* ===== ARABIC SCRIPT ===== */
+.arabic-text {
+  font-family: var(--font-arabic);
+  direction: rtl;
+  line-height: 2;
+}
+
+/* ===== CUSTOM GRADIENTS ===== */
+.gradient-hero {
+  background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 50%, #40916c 100%);
+}
+
+.gradient-gold {
+  background: linear-gradient(
+    90deg,
+    #92620a,
+    #c9a227,
+    #e8c55a,
+    #c9a227,
+    #92620a
+  );
+}
+
+.gradient-impact {
+  background: linear-gradient(180deg, #d8f3dc 0%, #ffffff 100%);
+}
+
+.gradient-warm-fade {
+  background: linear-gradient(180deg, #faf3e0 0%, #ffffff 100%);
+}
+
+/* ===== ISLAMIC LOADING SPINNER ===== */
+@keyframes spin-arabesque {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-arabesque {
+  animation: spin-arabesque 2s linear infinite;
+}
+
+/* ===== ANIMATED NUMBER COUNTER ===== */
+@keyframes count-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-count-up {
+  animation: count-up 0.6s ease-out forwards;
+}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface-warm);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-ghost);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-light);
+}
