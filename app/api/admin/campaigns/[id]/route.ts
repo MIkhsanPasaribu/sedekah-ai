@@ -1,31 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { campaignUpdateSchema } from "@/lib/validations/campaign";
+import { requireAdmin } from "@/lib/auth/admin";
 import { ZodError } from "zod";
-
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "")
-  .split(",")
-  .map((e) => e.trim())
-  .filter(Boolean);
-
-function isAdmin(email: string | undefined): boolean {
-  if (!email) return false;
-  return ADMIN_EMAILS.includes(email);
-}
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user || !isAdmin(user.email)) {
-      return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
+    const { error } = await requireAdmin();
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
     }
 
     const { id } = await params;

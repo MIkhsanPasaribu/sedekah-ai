@@ -1,26 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "")
-  .split(",")
-  .map((e) => e.trim())
-  .filter(Boolean);
-
-function isAdmin(email: string | undefined): boolean {
-  if (!email) return false;
-  return ADMIN_EMAILS.includes(email);
-}
+import { requireAdmin } from "@/lib/auth/admin";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user || !isAdmin(user.email)) {
-      return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
+    const { error } = await requireAdmin();
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
     }
 
     const { searchParams } = new URL(req.url);
