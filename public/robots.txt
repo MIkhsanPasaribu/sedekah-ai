@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Allow: /campaigns
+Allow: /campaigns/
+Disallow: /api/
+Disallow: /chat
+Disallow: /dashboard
+Disallow: /(auth)/
+
+Sitemap: https://sedekah-ai.vercel.app/sitemap.xml

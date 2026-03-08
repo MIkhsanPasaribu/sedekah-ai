@@ -80,6 +80,7 @@ export async function recommendNode(
         amount,
         percentage,
         reasoning: `Trust Score ${score}/100 — ${campaign.laz} (${campaign.lazVerified ? "Terverifikasi" : "Belum Terverifikasi"})`,
+        trustScore: score,
       });
     }
 
@@ -99,6 +100,7 @@ export async function recommendNode(
         amount: 0,
         percentage: 0,
         reasoning: `Trust Score ${score}/100 — ${campaign.laz} (${campaign.lazVerified ? "Terverifikasi" : "Belum Terverifikasi"})`,
+        trustScore: score,
       });
     }
   }

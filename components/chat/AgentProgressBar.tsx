@@ -6,6 +6,8 @@ const STEPS = [
   { node: "RESEARCH", label: "Riset", icon: "🔍" },
   { node: "FRAUD_DETECTOR", label: "Keamanan", icon: "🛡️" },
   { node: "RECOMMEND", label: "Rekomendasi", icon: "💡" },
+  { node: "PAYMENT_EXECUTOR", label: "Bayar", icon: "💳" },
+  { node: "IMPACT_TRACKER", label: "Dampak", icon: "📊" },
 ];
 
 /** Map the user-facing label back to a node name index */
@@ -15,9 +17,9 @@ const LABEL_TO_INDEX: Record<string, number> = {
   "Mencari kampanye terpercaya...": 2,
   "Menganalisis keamanan...": 3,
   "Menyusun rekomendasi...": 4,
-  "Menunggu konfirmasi Anda...": 5,
+  "Menunggu konfirmasi Anda...": 4,
   "Memproses pembayaran...": 5,
-  "Menyiapkan laporan dampak...": 5,
+  "Menyiapkan laporan dampak...": 6,
 };
 
 interface AgentProgressBarProps {

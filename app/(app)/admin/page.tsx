@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { Banknote, ArrowRightLeft, Tag, TrendingUp } from "lucide-react";
 
 export default async function AdminPage() {
@@ -99,13 +99,13 @@ export default async function AdminPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button
-              render={<Link href="/admin/disbursements" />}
-              className="w-full"
+            <Link
+              href="/admin/disbursements"
+              className={buttonVariants({ className: "w-full" })}
             >
               <Banknote className="mr-2 size-4" />
               Kelola Penyaluran
-            </Button>
+            </Link>
           </CardContent>
         </Card>
 
@@ -117,14 +117,16 @@ export default async function AdminPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button
-              render={<Link href="/admin/reconcile" />}
-              variant="outline"
-              className="w-full"
+            <Link
+              href="/admin/reconcile"
+              className={buttonVariants({
+                variant: "outline",
+                className: "w-full",
+              })}
             >
               <ArrowRightLeft className="mr-2 size-4" />
               Rekonsiliasi
-            </Button>
+            </Link>
           </CardContent>
         </Card>
 
@@ -136,14 +138,16 @@ export default async function AdminPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button
-              render={<Link href="/admin/discounts" />}
-              variant="outline"
-              className="w-full"
+            <Link
+              href="/admin/discounts"
+              className={buttonVariants({
+                variant: "outline",
+                className: "w-full",
+              })}
             >
               <Tag className="mr-2 size-4" />
               Kelola Promo
-            </Button>
+            </Link>
           </CardContent>
         </Card>
       </div>

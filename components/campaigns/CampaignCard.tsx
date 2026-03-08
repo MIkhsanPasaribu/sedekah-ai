@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { formatRupiah, hitungPersentase } from "@/lib/utils";
+import {
+  formatRupiah,
+  hitungPersentase,
+  getCampaignCategoryEmoji,
+  getCampaignCategoryLabel,
+} from "@/lib/utils";
 import { TrustScoreBadge } from "@/components/shared/TrustScoreBadge";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -15,22 +20,6 @@ interface CampaignCardProps {
   category: string;
   region: string;
 }
-
-const CATEGORY_EMOJI: Record<string, string> = {
-  yatim: "👦",
-  bencana: "🆘",
-  kesehatan: "🏥",
-  pendidikan: "📚",
-  pangan: "🍚",
-};
-
-const CATEGORY_LABEL: Record<string, string> = {
-  yatim: "Yatim",
-  bencana: "Bencana",
-  kesehatan: "Kesehatan",
-  pendidikan: "Pendidikan",
-  pangan: "Pangan",
-};
 
 export function CampaignCard({
   id,
@@ -52,9 +41,11 @@ export function CampaignCard({
         {/* Category Banner */}
         <div className="flex items-center justify-between bg-brand-green-ghost px-4 py-2">
           <div className="flex items-center gap-1.5">
-            <span className="text-sm">{CATEGORY_EMOJI[category] ?? "💚"}</span>
+            <span className="text-sm">
+              {getCampaignCategoryEmoji(category)}
+            </span>
             <span className="text-xs font-medium text-brand-green-deep">
-              {CATEGORY_LABEL[category] ?? category}
+              {getCampaignCategoryLabel(category)}
             </span>
           </div>
           <TrustScoreBadge score={trustScore} size="sm" />

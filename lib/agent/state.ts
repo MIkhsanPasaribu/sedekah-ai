@@ -62,6 +62,8 @@ export interface AllocationItem {
   amount: number;
   percentage: number;
   reasoning: string;
+  /** Direct trust score — avoids parsing from reasoning string */
+  trustScore?: number;
 }
 
 export interface Recommendation {

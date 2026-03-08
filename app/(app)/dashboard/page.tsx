@@ -8,10 +8,11 @@ import {
 } from "@/components/dashboard/MilestoneGrid";
 import { StreakCounter } from "@/components/dashboard/StreakCounter";
 import { DailyNudgeCard } from "@/components/dashboard/DailyNudgeCard";
+import { AutopilotCard } from "@/components/dashboard/AutopilotCard";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, getDailyNudge } from "@/lib/utils";
 
 export const metadata = {
   title: "Dashboard — SEDEKAH.AI",
@@ -244,6 +245,11 @@ export default async function DashboardPage() {
           <MilestoneGrid badges={milestones} />
         </div>
 
+        {/* Autopilot */}
+        <div className="mt-6">
+          <AutopilotCard />
+        </div>
+
         {/* Donation History */}
         <div className="mt-6 pb-4">
           <DonationHistory donations={donationHistory} />
@@ -251,98 +257,4 @@ export default async function DashboardPage() {
       </div>
     </div>
   );
-}
-
-// -------------------------------------------------------
-// Daily Nudge Messages — 30 pesan kontekstual Ramadhan
-// -------------------------------------------------------
-
-const RAMADHAN_NUDGES: Record<number, { donated: string; notDonated: string }> =
-  {
-    1: {
-      donated:
-        "Masya Allah, Ramadhan baru dimulai dan Anda sudah bersedekah! Semoga istiqamah 30 hari ke depan. 🤲",
-      notDonated:
-        "Selamat datang di Ramadhan! Hari pertama penuh berkah — mulai kebaikan dengan sedekah hari ini.",
-    },
-    7: {
-      donated:
-        "Alhamdulillah, seminggu penuh kebaikan! Streak Anda luar biasa. Terus jaga momentum ini. 🔥",
-      notDonated:
-        "Satu minggu Ramadhan sudah berlalu. Belum terlambat untuk memulai streak kebaikan Anda hari ini.",
-    },
-    10: {
-      donated:
-        "Sepertiga Ramadhan sudah lewat — dan Anda konsisten bersedekah. Semoga Allah lipat gandakan. ✨",
-      notDonated:
-        "10 hari pertama Ramadhan (hari rahmat) hampir berakhir. Manfaatkan sisa waktunya dengan berdonasi.",
-    },
-    15: {
-      donated:
-        "Nishfu Ramadhan! Setengah perjalanan sudah Anda lalui dengan kebaikan. Subhanallah! 🌙",
-      notDonated:
-        "Hari ke-15 — kita memasuki 10 hari kedua (hari pengampunan). Sedekah hari ini bisa jadi pembuka pintu maghfirah.",
-    },
-    20: {
-      donated:
-        "Memasuki 10 malam terakhir! Sedekah Anda di malam-malam ini bisa bernilai 1000 bulan. 🕌",
-      notDonated:
-        "10 malam terakhir Ramadhan dimulai! Di salah satu malam ini ada Lailatul Qadr. Jangan lewatkan.",
-    },
-    21: {
-      donated:
-        "Malam ganjil pertama dari 10 terakhir. Perbanyak ibadah dan sedekah — Anda sudah di jalur yang tepat!",
-      notDonated:
-        "Malam ke-21 — salah satu malam yang dicari. Sedekah malam ini bernilai istimewa.",
-    },
-    25: {
-      donated:
-        "Lima hari lagi! Semangat Anda di Ramadhan ini sangat menginspirasi. Terus bersedekah. 💪",
-      notDonated:
-        "Tinggal 5 hari lagi Ramadhan berakhir. Masih ada waktu untuk mengumpulkan pahala sebanyak-banyaknya.",
-    },
-    27: {
-      donated:
-        "Malam ke-27 — malam yang paling banyak dicari sebagai Lailatul Qadr. Sedekah Anda istimewa! ✨",
-      notDonated:
-        "Malam ke-27 Ramadhan! Banyak ulama berpendapat ini adalah Lailatul Qadr. Sedekah satu malam ini = 1000 bulan.",
-    },
-    29: {
-      donated:
-        "Ramadhan hampir usai. Alhamdulillah atas semua kebaikan yang telah Anda tabur. Semoga diterima Allah. 🤲",
-      notDonated:
-        "Satu hari lagi sebelum Ramadhan berakhir. Tutup bulan suci ini dengan sedekah terakhir Anda.",
-    },
-    30: {
-      donated:
-        "Hari terakhir Ramadhan! Masya Allah, perjalanan kebaikan Anda di bulan ini sungguh luar biasa. Selamat Hari Raya! 🎉",
-      notDonated:
-        "Hari terakhir Ramadhan. Jangan lupa zakat fitrah! Tutup Ramadhan dengan kebaikan. Selamat Hari Raya! 🎉",
-    },
-  };
-
-function getDailyNudge(
-  ramadhanDay: number,
-  donatedToday: boolean,
-): string | null {
-  if (ramadhanDay <= 0 || ramadhanDay > 30) return null;
-
-  // Cek apakah ada pesan spesifik untuk hari ini
-  const specific = RAMADHAN_NUDGES[ramadhanDay];
-  if (specific) {
-    return donatedToday ? specific.donated : specific.notDonated;
-  }
-
-  // Generic nudge berdasarkan fase Ramadhan
-  if (donatedToday) {
-    return `Alhamdulillah, Anda sudah bersedekah di hari ke-${ramadhanDay} Ramadhan. Semoga Allah menerima amal ibadah Anda. 🤲`;
-  }
-
-  if (ramadhanDay <= 10) {
-    return `Hari ke-${ramadhanDay} — fase rahmat Ramadhan. Sedekah hari ini membuka pintu rahmat-Nya yang luas.`;
-  }
-  if (ramadhanDay <= 20) {
-    return `Hari ke-${ramadhanDay} — fase maghfirah. Sedekah di hari-hari ini menjadi wasilah pengampunan.`;
-  }
-  return `Hari ke-${ramadhanDay} — 10 malam terakhir! Setiap malam bisa jadi Lailatul Qadr. Jangan lewatkan sedekah malam ini.`;
 }

@@ -55,6 +55,32 @@ export function hitungPersentase(current: number, target: number): number {
 // Category Helpers
 // ============================================================
 
+/** Campaign categories — emoji map (used by CampaignCard, CampaignForm, etc.) */
+export const CAMPAIGN_CATEGORY_EMOJI: Record<string, string> = {
+  yatim: "👦",
+  bencana: "🆘",
+  kesehatan: "🏥",
+  pendidikan: "📚",
+  pangan: "🍚",
+};
+
+/** Campaign categories — Indonesian label map */
+export const CAMPAIGN_CATEGORY_LABEL: Record<string, string> = {
+  yatim: "Yatim",
+  bencana: "Bencana",
+  kesehatan: "Kesehatan",
+  pendidikan: "Pendidikan",
+  pangan: "Pangan",
+};
+
+export function getCampaignCategoryEmoji(category: string): string {
+  return CAMPAIGN_CATEGORY_EMOJI[category.toLowerCase()] ?? "💚";
+}
+
+export function getCampaignCategoryLabel(category: string): string {
+  return CAMPAIGN_CATEGORY_LABEL[category.toLowerCase()] ?? category;
+}
+
 export function getCategoryEmoji(category: string): string {
   const map: Record<string, string> = {
     pendidikan: "📚",
@@ -100,4 +126,49 @@ export function getTrustScoreLabel(score: number): string {
   if (score >= 55) return "Cukup Baik";
   if (score >= 40) return "Perlu Perhatian";
   return "Berisiko Tinggi";
+}
+
+// ============================================================
+// Ramadhan Helpers
+// ============================================================
+
+/**
+ * Generates a contextual daily nudge message based on the current Ramadhan day.
+ * Returns null if outside of Ramadhan (ramadhanDay <= 0).
+ */
+export function getDailyNudge(
+  ramadhanDay: number,
+  donatedToday: boolean,
+): string | null {
+  if (ramadhanDay <= 0) return null;
+
+  if (donatedToday) {
+    return `Alhamdulillah! Hari ke-${ramadhanDay} Ramadhan sudah tercatat. Semoga Allah melipatgandakan kebaikan Anda — QS 2:261. 🤲`;
+  }
+
+  if (ramadhanDay <= 10) {
+    // 10 hari pertama: Rahmat
+    const messages = [
+      `Hari ke-${ramadhanDay} Ramadhan — 10 malam penuh rahmat. Mulailah perjalanan sedekah Anda hari ini, walau dengan nominal kecil. 💚`,
+      `Di hari ke-${ramadhanDay} ini, Allah membuka pintu rahmat selebar-lebarnya. Setiap rupiah sedekah Anda adalah investasi akhirat. 🌙`,
+      `Hari ke-${ramadhanDay}: "Barang siapa yang memberi makan orang yang berpuasa, maka ia mendapat pahala seperti orang puasa itu." — HR. Tirmidzi`,
+    ];
+    return messages[ramadhanDay % messages.length];
+  } else if (ramadhanDay <= 20) {
+    // 10 hari kedua: Maghfirah
+    const messages = [
+      `Hari ke-${ramadhanDay} Ramadhan — 10 malam penuh maghfirah. Jangan biarkan hari ini berlalu tanpa amal jariyah. 🕌`,
+      `Hari ke-${ramadhanDay}: Dosa-dosa diampuni di bulan ini. Perkuat dengan sedekah yang membersihkan harta Anda. 🤲`,
+      `Di hari ke-${ramadhanDay} ini, setiap kebaikan dilipatgandakan. Kampanye yang membutuhkan bantuan Anda masih terbuka. 💡`,
+    ];
+    return messages[ramadhanDay % messages.length];
+  } else {
+    // 10 hari terakhir: Itqun min an-nar (Pembebasan dari api neraka)
+    const messages = [
+      `Hari ke-${ramadhanDay} Ramadhan — 10 malam terakhir, malam-malam paling mulia. Manfaatkan setiap saat untuk beramal. ✨`,
+      `Hari ke-${ramadhanDay}: Lailatul Qadar tersembunyi di malam-malam ini. Perbanyak sedekah untuk meraih malam seribu bulan. 🌟`,
+      `Di hari ke-${ramadhanDay} ini, jangan biarkan Ramadhan berlalu tanpa meninggalkan jejak kebaikan yang abadi. 💎`,
+    ];
+    return messages[ramadhanDay % messages.length];
+  }
 }

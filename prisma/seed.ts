@@ -61,6 +61,18 @@ const SEED_USERS = [
   },
 ];
 
+// ===== ADMIN ACCOUNTS =====
+// Role: admin — akses dashboard admin, disbursement, dll.
+// Password: Admin@Sedekah2026
+const SEED_ADMINS = [
+  {
+    email: "admin@sedekah.ai",
+    password: "Admin@Sedekah2026",
+    name: "Admin SEDEKAH.AI",
+    mobile: "081111111111",
+  },
+];
+
 // Helper: tanggal relative ke Ramadhan 2026 (mulai 17 Feb)
 function ramadhanDate(day: number, hour = 18, minute = 30): Date {
   const d = new Date("2026-02-17T00:00:00Z");
@@ -81,9 +93,13 @@ async function main(): Promise<void> {
 
   // Hapus akun Supabase Auth seed lama (jika ada)
   console.log("🔑 Membersihkan akun Supabase Auth lama...");
-  for (const u of SEED_USERS) {
+  const allSeedEmails = [
+    ...SEED_USERS.map((u) => u.email),
+    ...SEED_ADMINS.map((u) => u.email),
+  ];
+  for (const email of allSeedEmails) {
     const { data: existing } = await supabaseAdmin.auth.admin.listUsers();
-    const found = existing?.users?.find((au) => au.email === u.email);
+    const found = existing?.users?.find((au) => au.email === email);
     if (found) {
       await supabaseAdmin.auth.admin.deleteUser(found.id);
     }
@@ -648,6 +664,38 @@ async function main(): Promise<void> {
   const [ahmad, siti, budi, rizky, fatimah] = users;
   console.log(`✅ ${users.length} akun pengguna berhasil dibuat`);
 
+  // ===== SEED ADMINS =====
+  console.log("🔐 Membuat akun admin...");
+  await Promise.all(
+    SEED_ADMINS.map(async (u) => {
+      const { data: authData, error: authError } =
+        await supabaseAdmin.auth.admin.createUser({
+          email: u.email,
+          password: u.password,
+          email_confirm: true,
+          user_metadata: { full_name: u.name, phone: u.mobile },
+        });
+
+      if (authError || !authData.user) {
+        throw new Error(
+          `Gagal buat Supabase Auth admin ${u.email}: ${authError?.message}`,
+        );
+      }
+
+      return prisma.user.create({
+        data: {
+          authId: authData.user.id,
+          email: u.email,
+          name: u.name,
+          mobile: u.mobile,
+          role: "admin",
+          ramadhanStreak: 0,
+        },
+      });
+    }),
+  );
+  console.log(`✅ ${SEED_ADMINS.length} akun admin berhasil dibuat`);
+
   // Alias kampanye berdasarkan nama untuk mudah referensi
   const cBeasiswaYatim = campaigns.find((c) =>
     c.name.includes("Beasiswa Yatim Dhuafa"),
@@ -1197,10 +1245,15 @@ async function main(): Promise<void> {
   console.log("🕌 Seeding selesai! Barakallah fiik.");
   console.log("");
   console.log("📋 Akun seed siap dipakai login:");
-  console.log("   Password semua akun: Sedekah2026");
+  console.log("   Password donor: Sedekah2026");
+  console.log("   Password admin: Admin@Sedekah2026");
   console.log("");
   SEED_USERS.forEach((u) => {
-    console.log(`   ${u.name.padEnd(22)} | ${u.email}`);
+    console.log(`   [donor] ${u.name.padEnd(22)} | ${u.email}`);
+  });
+  console.log("");
+  SEED_ADMINS.forEach((u) => {
+    console.log(`   [admin] ${u.name.padEnd(22)} | ${u.email}`);
   });
 }
 

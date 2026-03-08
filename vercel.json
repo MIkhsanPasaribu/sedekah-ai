@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "app/api/agent/route": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/autopilot/execute",
+      "schedule": "0 7 * * *"
+    }
+  ]
+}

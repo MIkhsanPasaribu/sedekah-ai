@@ -1,0 +1,38 @@
+{
+  "name": "SEDEKAH.AI",
+  "short_name": "Sedekah.AI",
+  "description": "Amil Digital Terpercaya — Hitung zakat & salurkan sedekah dengan AI",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1B4332",
+  "theme_color": "#1B4332",
+  "categories": ["finance", "lifestyle"],
+  "lang": "id",
+  "icons": [
+    {
+      "src": "/images/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/images/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Chat dengan AI",
+      "url": "/chat",
+      "description": "Mulai percakapan dengan Amil AI"
+    },
+    {
+      "name": "Kampanye",
+      "url": "/campaigns",
+      "description": "Jelajahi kampanye donasi terpercaya"
+    }
+  ]
+}

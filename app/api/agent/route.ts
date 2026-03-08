@@ -12,6 +12,23 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+// ── In-memory rate limiter (10 requests per 5 minutes per user) ──────────────
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(userId);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT_MAX) return false;
+  entry.count += 1;
+  return true;
+}
+
 /** Node name → user-facing label */
 const NODE_LABELS: Record<string, string> = {
   INTAKE: "Memahami niat Anda...",
@@ -45,6 +62,14 @@ export async function POST(req: NextRequest): Promise<Response> {
       return NextResponse.json(
         { error: "Silakan login terlebih dahulu" },
         { status: 401 },
+      );
+    }
+
+    // Rate limiting
+    if (!checkRateLimit(user.id)) {
+      return NextResponse.json(
+        { error: "Terlalu banyak permintaan. Mohon tunggu beberapa menit." },
+        { status: 429 },
       );
     }
     const donorEmail: string = user.email;

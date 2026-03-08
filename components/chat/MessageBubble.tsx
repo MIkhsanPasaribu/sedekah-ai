@@ -1,3 +1,7 @@
+"use client";
+
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
@@ -66,50 +70,17 @@ export function MessageBubble({
               <div className="h-2 w-2 animate-bounce rounded-full bg-brand-green-light [animation-delay:-0.15s]" />
               <div className="h-2 w-2 animate-bounce rounded-full bg-brand-green-light" />
             </div>
+          ) : isUser ? (
+            <p className="text-sm leading-relaxed text-ink-dark">{content}</p>
           ) : (
-            <div className="prose-sm whitespace-pre-wrap text-sm leading-relaxed text-ink-dark">
-              {renderContent(content)}
+            <div className="prose prose-sm max-w-none text-ink-dark [&_a]:font-medium [&_a]:text-brand-gold-core [&_a]:underline [&_a:hover]:text-brand-gold-deep [&_strong]:font-semibold [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-0.5 [&_p]:my-1 [&_code]:rounded [&_code]:bg-ink-ghost/30 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_blockquote]:border-l-2 [&_blockquote]:border-brand-gold-core [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-ink-mid">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {content}
+              </ReactMarkdown>
             </div>
           )}
         </div>
       </div>
     </div>
   );
-}
-
-/**
- * Simple markdown-like rendering for bold text and links
- */
-function renderContent(content: string): React.ReactNode {
-  // Split by **bold** patterns
-  const parts = content.split(/(\*\*.*?\*\*|\[.*?\]\(.*?\))/g);
-
-  return parts.map((part, i) => {
-    // Bold text
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return (
-        <strong key={i} className="font-semibold">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-
-    // Links [text](url)
-    const linkMatch = part.match(/\[(.*?)\]\((.*?)\)/);
-    if (linkMatch) {
-      return (
-        <a
-          key={i}
-          href={linkMatch[2]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-medium text-brand-gold-core underline hover:text-brand-gold-deep"
-        >
-          {linkMatch[1]}
-        </a>
-      );
-    }
-
-    return <span key={i}>{part}</span>;
-  });
 }

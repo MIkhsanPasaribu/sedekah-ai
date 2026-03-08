@@ -192,7 +192,12 @@ export function CampaignForm() {
                   Tanggal Berakhir{" "}
                   <span className="text-ink-light">(opsional)</span>
                 </Label>
-                <Input id="endsAt" name="endsAt" type="date" />
+                <Input
+                  id="endsAt"
+                  name="endsAt"
+                  type="date"
+                  min={new Date().toISOString().split("T")[0]}
+                />
               </div>
 
               {/* Error */}

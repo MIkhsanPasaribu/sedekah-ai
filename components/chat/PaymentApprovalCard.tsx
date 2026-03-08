@@ -13,9 +13,13 @@ interface PaymentApprovalCardProps {
   isLoading?: boolean;
 }
 
-/** Parse "Trust Score 85/100 — ..." → 85 */
-function parseTrustScore(reasoning: string): number | null {
-  const match = reasoning.match(/Trust Score (\d+)\/100/);
+/** Extract trust score from alloc.trustScore or fall back to parsing reasoning string */
+function extractTrustScore(alloc: {
+  trustScore?: number;
+  reasoning: string;
+}): number | null {
+  if (alloc.trustScore !== undefined) return alloc.trustScore;
+  const match = alloc.reasoning.match(/Trust Score (\d+)\/100/);
   return match ? parseInt(match[1], 10) : null;
 }
 
@@ -40,7 +44,7 @@ export function PaymentApprovalCard({
       {/* Allocations */}
       <div className="divide-y divide-ink-ghost px-5 py-3">
         {recommendation.allocations.map((alloc, idx) => {
-          const trustScore = parseTrustScore(alloc.reasoning);
+          const trustScore = extractTrustScore(alloc);
           return (
             <div key={alloc.campaignId} className="py-3">
               <div className="flex items-start justify-between gap-4">
