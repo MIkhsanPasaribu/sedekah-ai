@@ -9,20 +9,32 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button-variants";
-import { Banknote, ArrowRightLeft, Tag, TrendingUp } from "lucide-react";
+import {
+  Banknote,
+  ArrowRightLeft,
+  Tag,
+  TrendingUp,
+  Building2,
+} from "lucide-react";
 
 export default async function AdminPage() {
   // Aggregate stats
-  const [campaignCount, totalCollected, pendingDisbursements, totalDisbursed] =
-    await Promise.all([
-      prisma.campaign.count({ where: { isActive: true } }),
-      prisma.campaign.aggregate({ _sum: { collectedAmount: true } }),
-      prisma.disbursement.count({ where: { status: "pending" } }),
-      prisma.disbursement.aggregate({
-        where: { status: { in: ["completed", "verified"] } },
-        _sum: { amount: true },
-      }),
-    ]);
+  const [
+    campaignCount,
+    totalCollected,
+    pendingDisbursements,
+    totalDisbursed,
+    lazPartnerCount,
+  ] = await Promise.all([
+    prisma.campaign.count({ where: { isActive: true } }),
+    prisma.campaign.aggregate({ _sum: { collectedAmount: true } }),
+    prisma.disbursement.count({ where: { status: "pending" } }),
+    prisma.disbursement.aggregate({
+      where: { status: { in: ["completed", "verified"] } },
+      _sum: { amount: true },
+    }),
+    prisma.lazPartner.count({ where: { isActive: true } }),
+  ]);
 
   const collected = totalCollected._sum.collectedAmount ?? 0;
   const disbursed = totalDisbursed._sum.amount ?? 0;
@@ -85,7 +97,7 @@ export default async function AdminPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader>
             <CardTitle>Penyaluran Dana</CardTitle>
@@ -147,6 +159,32 @@ export default async function AdminPage() {
             >
               <Tag className="mr-2 size-4" />
               Kelola Promo
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>LAZ Partners</CardTitle>
+            <CardDescription>
+              Kelola mitra LAZ dan data rekening resmi mereka
+              {lazPartnerCount === 0 && (
+                <span className="ml-2 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                  Belum ada
+                </span>
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              href="/admin/laz-partners"
+              className={buttonVariants({
+                variant: "outline",
+                className: "w-full",
+              })}
+            >
+              <Building2 className="mr-2 size-4" />
+              Kelola LAZ Partners
             </Link>
           </CardContent>
         </Card>
