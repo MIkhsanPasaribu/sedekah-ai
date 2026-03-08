@@ -53,6 +53,9 @@ export interface CreatePaymentRequest {
   amount: number;
   description?: string;
   redirectUrl?: string;
+  email?: string;
+  mobile?: string;
+  expiredAt?: string;
 }
 
 export interface MayarPayment {
