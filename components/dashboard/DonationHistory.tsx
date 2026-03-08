@@ -1,5 +1,6 @@
 import { formatRupiah, formatTanggal } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 interface DonationHistoryItem {
   id: string;
@@ -42,9 +43,7 @@ const TYPE_LABELS: Record<string, string> = {
   wakaf: "Wakaf",
 };
 
-export function DonationHistory({
-  donations,
-}: DonationHistoryProps) {
+export function DonationHistory({ donations }: DonationHistoryProps) {
   if (donations.length === 0) {
     return (
       <div className="rounded-xl border border-ink-ghost bg-surface-white p-8 text-center shadow-sm">
@@ -105,6 +104,24 @@ export function DonationHistory({
                   📖 {donation.islamicContext}
                 </p>
               )}
+              {/* Action links */}
+              <div className="mt-2 flex items-center gap-3">
+                <Link
+                  href={`/dashboard/impact/${donation.id}`}
+                  className="text-xs font-medium text-brand-green-deep hover:text-brand-green-mid underline underline-offset-2"
+                >
+                  Lihat dampak →
+                </Link>
+                {donation.status === "paid" && (
+                  <a
+                    href={`/api/donations/${donation.id}/certificate`}
+                    download={`sertifikat-${donation.id.slice(0, 8)}.png`}
+                    className="text-xs text-ink-mid hover:text-ink-dark underline underline-offset-2"
+                  >
+                    Unduh sertifikat
+                  </a>
+                )}
+              </div>
             </div>
           );
         })}

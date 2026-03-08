@@ -17,6 +17,7 @@ import {
   ArrowRightLeft,
   Tag,
   Trash2,
+  Trophy,
 } from "lucide-react";
 import { signOut } from "@/app/(auth)/login/actions";
 import {
@@ -44,6 +45,7 @@ const NAV_ITEMS = [
   { href: "/chat", label: "Chat AI", icon: MessageSquare },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/campaigns", label: "Kampanye", icon: Heart },
+  { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
 ];
 
 const ADMIN_NAV_ITEMS = [
