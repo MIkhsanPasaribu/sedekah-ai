@@ -10,13 +10,13 @@ export const metadata = {
 };
 
 interface CampaignsPageProps {
-  searchParams: Promise<{ kategori?: string }>;
+  searchParams: Promise<{ kategori?: string; q?: string }>;
 }
 
 export default async function CampaignsPage({
   searchParams,
 }: CampaignsPageProps) {
-  const { kategori } = await searchParams;
+  const { kategori, q } = await searchParams;
 
   // Enum values in schema match URL params directly (yatim, bencana, etc.)
   const validCategories = [
@@ -29,6 +29,8 @@ export default async function CampaignsPage({
   const dbCategory =
     kategori && validCategories.includes(kategori) ? kategori : undefined;
 
+  const searchQuery = q?.trim() ?? "";
+
   const campaigns = await prisma.campaign.findMany({
     where: {
       isActive: true,
@@ -40,6 +42,15 @@ export default async function CampaignsPage({
               | "kesehatan"
               | "pendidikan"
               | "pangan",
+          }
+        : {}),
+      ...(searchQuery
+        ? {
+            OR: [
+              { name: { contains: searchQuery, mode: "insensitive" } },
+              { description: { contains: searchQuery, mode: "insensitive" } },
+              { laz: { contains: searchQuery, mode: "insensitive" } },
+            ],
           }
         : {}),
     },
@@ -69,7 +80,7 @@ export default async function CampaignsPage({
         </div>
 
         {/* Filter */}
-        <CampaignFilter activeCategory={kategori ?? null} />
+        <CampaignFilter activeCategory={kategori ?? null} q={searchQuery} />
 
         {/* Campaign Grid */}
         {campaigns.length > 0 ? (
