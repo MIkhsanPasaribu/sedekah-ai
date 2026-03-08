@@ -1,6 +1,8 @@
 import { formatRupiah, hitungPersentase } from "@/lib/utils";
 import { TrustScoreBar } from "@/components/shared/TrustScoreBadge";
-import { Button } from "@/components/ui/button";
+import { CampaignCTA } from "@/components/campaigns/CampaignCTA";
+import { DonationTicker } from "@/components/campaigns/DonationTicker";
+import { ShareButtons } from "@/components/campaigns/ShareButtons";
 import {
   Shield,
   MapPin,
@@ -9,7 +11,6 @@ import {
   CheckCircle2,
   Banknote,
 } from "lucide-react";
-import Link from "next/link";
 
 interface CampaignDetailCardProps {
   id: string;
@@ -130,15 +131,12 @@ export function CampaignDetailCard({
           </p>
         </div>
 
+        {/* Real-time Donation Ticker */}
+        <DonationTicker campaignId={id} />
+
         {/* CTA */}
-        <div className="mt-5 flex gap-3">
-          <Button
-            size="lg"
-            className="w-full flex-1"
-            render={<Link href="/chat" />}
-          >
-            💚 Donasi via AI Chat
-          </Button>
+        <div className="mt-5">
+          <CampaignCTA campaignId={id} campaignName={name} />
         </div>
       </div>
 
@@ -244,6 +242,12 @@ export function CampaignDetailCard({
           </div>
         </div>
       )}
+      {/* Share */}
+      <ShareButtons
+        campaignId={id}
+        campaignName={name}
+        trustScore={trustScore}
+      />
     </div>
   );
 }
