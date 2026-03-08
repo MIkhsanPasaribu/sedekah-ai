@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { incrementCampaignCollected } from "@/lib/db/campaign-helpers";
 import type { MayarWebhookEvent } from "@/lib/mayar/types";
 
 export const runtime = "nodejs";
@@ -103,21 +104,7 @@ async function handlePaymentCompleted(
   });
 
   // Update collectedAmount setiap kampanye terkait
-  const campaignIncrements = new Map<string, number>();
-  for (const d of pendingDonations) {
-    if (d.campaignId) {
-      campaignIncrements.set(
-        d.campaignId,
-        (campaignIncrements.get(d.campaignId) ?? 0) + d.amount,
-      );
-    }
-  }
-  for (const [campaignId, incrementAmount] of campaignIncrements) {
-    await prisma.campaign.update({
-      where: { id: campaignId },
-      data: { collectedAmount: { increment: incrementAmount } },
-    });
-  }
+  await incrementCampaignCollected(pendingDonations, prisma);
 
   // Update user Ramadhan streak (hanya sekali per invoice)
   const firstDonation = donations[0];
