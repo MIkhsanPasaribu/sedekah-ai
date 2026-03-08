@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 
 export default function NotFoundPage() {
   return (
@@ -13,10 +13,12 @@ export default function NotFoundPage() {
           Sepertinya halaman yang Anda cari tidak ada atau telah dipindahkan.
         </p>
         <div className="mt-6 flex justify-center gap-3">
-          <Button render={<Link href="/" />}>Ke Beranda</Button>
-          <Button variant="outline" render={<Link href="/chat" />}>
+          <Link href="/" className={buttonVariants()}>
+            Ke Beranda
+          </Link>
+          <Link href="/chat" className={buttonVariants({ variant: "outline" })}>
             Chat AI
-          </Button>
+          </Link>
         </div>
       </div>
     </div>
