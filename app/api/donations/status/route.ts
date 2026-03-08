@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { getInvoice } from "@/lib/mayar/invoice";
+import { incrementCampaignCollected } from "@/lib/db/campaign-helpers";
 
 export const runtime = "nodejs";
 
@@ -102,21 +103,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             });
 
             if (mappedStatus === "paid") {
-              const campaignIncrements = new Map<string, number>();
-              for (const d of allDonations) {
-                if (d.campaignId) {
-                  campaignIncrements.set(
-                    d.campaignId,
-                    (campaignIncrements.get(d.campaignId) ?? 0) + d.amount,
-                  );
-                }
-              }
-              for (const [cId, inc] of campaignIncrements) {
-                await tx.campaign.update({
-                  where: { id: cId },
-                  data: { collectedAmount: { increment: inc } },
-                });
-              }
+              await incrementCampaignCollected(allDonations, tx);
             }
           });
 
