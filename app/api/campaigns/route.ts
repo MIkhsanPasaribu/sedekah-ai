@@ -18,6 +18,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // Look up DB user for creatorId
+    const dbUser = await prisma.user.findUnique({
+      where: { authId: user.id },
+      select: { id: true },
+    });
+
     const body = await req.json();
     const parsed = campaignCreateSchema.parse(body);
 
@@ -41,6 +47,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         isActive: true,
         fraudFlags: 0,
         endsAt: parsed.endsAt ? new Date(parsed.endsAt) : null,
+        creatorId: dbUser?.id ?? null,
       },
     });
 
