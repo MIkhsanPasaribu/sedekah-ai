@@ -89,6 +89,7 @@ async function main(): Promise<void> {
   await prisma.donation.deleteMany();
   await prisma.givingJourney.deleteMany();
   await prisma.campaign.deleteMany();
+  await prisma.lazPartner.deleteMany();
   await prisma.user.deleteMany();
 
   // Hapus akun Supabase Auth seed lama (jika ada)
@@ -104,6 +105,61 @@ async function main(): Promise<void> {
       await supabaseAdmin.auth.admin.deleteUser(found.id);
     }
   }
+
+  // ===== LAZ PARTNERS REGISTRY =====
+  await prisma.lazPartner.createMany({
+    data: [
+      {
+        name: "BAZNAS",
+        bankName: "BNI Syariah",
+        accountNumber: "1234567890",
+        accountHolder: "Badan Amil Zakat Nasional",
+      },
+      {
+        name: "Dompet Dhuafa",
+        bankName: "Bank Mandiri Syariah",
+        accountNumber: "2345678901",
+        accountHolder: "Dompet Dhuafa Republika",
+      },
+      {
+        name: "Rumah Zakat",
+        bankName: "BCA Syariah",
+        accountNumber: "3456789012",
+        accountHolder: "Yayasan Rumah Zakat Indonesia",
+      },
+      {
+        name: "Rumah Yatim",
+        bankName: "BRI Syariah",
+        accountNumber: "4567890123",
+        accountHolder: "Yayasan Rumah Yatim Arrohman",
+      },
+      {
+        name: "LAZ Al-Azhar",
+        bankName: "Bank Muamalat",
+        accountNumber: "5678901234",
+        accountHolder: "LAZ Al-Azhar Peduli Ummat",
+      },
+      {
+        name: "Lazismu",
+        bankName: "BNI Syariah",
+        accountNumber: "6789012345",
+        accountHolder: "Lembaga Amil Zakat Infaq Shadaqah Muhammadiyah",
+      },
+      {
+        name: "Yayasan Nurul Hayat",
+        bankName: "Bank Jatim Syariah",
+        accountNumber: "7890123456",
+        accountHolder: "Yayasan Nurul Hayat",
+      },
+      {
+        name: "PKPU (Pos Keadilan Peduli Umat)",
+        bankName: "BRI Syariah",
+        accountNumber: "8901234567",
+        accountHolder: "PKPU Human Initiative",
+      },
+    ],
+  });
+  console.log("✅ LAZ Partners registry berhasil dibuat");
 
   // ===== 20 KAMPANYE SAMPLE =====
   const campaigns = await Promise.all([

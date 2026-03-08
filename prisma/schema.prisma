@@ -82,11 +82,12 @@ model User {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  donations       Donation[]
-  givingJourney   GivingJourney[]
-  conversations   Conversation[]
-  disbursements   Disbursement[]
-  autopilotConfig AutopilotConfig?
+  donations        Donation[]
+  givingJourney    GivingJourney[]
+  conversations    Conversation[]
+  disbursements    Disbursement[]
+  autopilotConfig  AutopilotConfig?
+  createdCampaigns Campaign[] @relation("CampaignCreator")
 
   @@map("users")
 }
@@ -132,11 +133,13 @@ model Campaign {
   isActive        Boolean          @default(true)
   fraudFlags      Int              @default(0)
   endsAt          DateTime?
+  creatorId       String?
   createdAt       DateTime         @default(now())
 
   donations      Donation[]
   fraudAlerts    FraudFlag[]
   disbursements  Disbursement[]
+  creator        User?            @relation("CampaignCreator", fields: [creatorId], references: [id], onDelete: SetNull)
 
   @@index([category])
   @@index([isActive])
@@ -204,12 +207,30 @@ model Message {
   @@map("messages")
 }
 
+model LazPartner {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  bankName      String
+  accountNumber String
+  accountHolder String
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  disbursements Disbursement[]
+
+  @@map("laz_partners")
+}
+
 model Disbursement {
   id               String             @id @default(uuid())
   campaignId       String
+  lazPartnerId     String?
   amount           Int
   recipientLaz     String
   recipientAccount String?
+  bankName         String?
+  accountHolder    String?
   status           DisbursementStatus @default(pending)
   transferProof    String?
   notes            String?
@@ -218,11 +239,13 @@ model Disbursement {
   disbursedById    String
   createdAt        DateTime           @default(now())
 
-  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  disbursedBy User     @relation(fields: [disbursedById], references: [id])
+  campaign    Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  disbursedBy User        @relation(fields: [disbursedById], references: [id])
+  lazPartner  LazPartner? @relation(fields: [lazPartnerId], references: [id], onDelete: SetNull)
 
   @@index([campaignId])
   @@index([status])
+  @@index([lazPartnerId])
   @@map("disbursements")
 }
 
