@@ -13,6 +13,8 @@ import {
   Heart,
   Users,
   Sparkles,
+  Download,
+  Share2,
 } from "lucide-react";
 
 interface ImpactDetailPageProps {
@@ -178,6 +180,63 @@ export default async function ImpactDetailPage({
                 >
                   Lanjutkan Pembayaran →
                 </a>
+              )}
+
+              {/* Paid-only actions: certificate + share + donate again */}
+              {donation.status === "paid" && (
+                <div className="space-y-3">
+                  {/* Ayat */}
+                  <div className="rounded-xl bg-brand-gold-ghost border border-brand-gold-pale px-4 py-3 text-center">
+                    <p
+                      className="font-amiri text-base leading-relaxed text-brand-gold-deep"
+                      dir="rtl"
+                      lang="ar"
+                    >
+                      مَّثَلُ ٱلَّذِينَ يُنفِقُونَ أَمْوَٰلَهُمْ فِى سَبِيلِ
+                      ٱللَّهِ
+                    </p>
+                    <p className="mt-1 text-[11px] text-ink-mid italic">
+                      "Perumpamaan orang yang menginfakkan hartanya di jalan
+                      Allah..." — QS 2:261
+                    </p>
+                  </div>
+
+                  {/* Certificate download */}
+                  <a
+                    href={`/api/donations/${donationId}/certificate`}
+                    download={`sertifikat-donasi-${donationId.slice(0, 8)}.png`}
+                    className="flex items-center justify-center gap-2 w-full rounded-xl border border-brand-green-deep bg-white py-3 text-sm font-bold text-brand-green-deep transition hover:bg-brand-green-ghost"
+                  >
+                    <Download className="h-4 w-4" />
+                    Unduh Sertifikat Donasi
+                  </a>
+
+                  {/* Donate again */}
+                  {donation.campaign && (
+                    <Link
+                      href={`/campaigns/${donation.campaign.id}/donate`}
+                      className="flex items-center justify-center gap-2 w-full rounded-xl bg-brand-green-deep py-3 text-sm font-bold text-white transition hover:bg-brand-green-mid"
+                    >
+                      <Heart className="h-4 w-4" />
+                      Donasi Lagi ke Kampanye Ini
+                    </Link>
+                  )}
+
+                  {/* Share (simple wa link) */}
+                  {donation.campaign && (
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(
+                        `Alhamdulillah, saya baru berdonasi ${formatRupiah(donation.amount)} untuk kampanye "${donation.campaign.name}" via SEDEKAH.AI 🤲\n\nYuk ikut berdonasi: ${process.env.NEXT_PUBLIC_APP_URL ?? ""}/campaigns/${donation.campaign.id}`,
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 w-full rounded-xl border border-ink-ghost bg-white py-3 text-sm font-medium text-ink-dark transition hover:bg-brand-green-ghost"
+                    >
+                      <Share2 className="h-4 w-4" />
+                      Bagikan ke WhatsApp
+                    </a>
+                  )}
+                </div>
               )}
             </div>
           </CardContent>
