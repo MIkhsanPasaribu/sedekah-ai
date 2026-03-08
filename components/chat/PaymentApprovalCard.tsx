@@ -1,6 +1,7 @@
 "use client";
 
-import { Button } from "@/components/shared/Button";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { TrustScoreBar } from "@/components/shared/TrustScoreBadge";
 import { formatRupiah } from "@/lib/utils";
 import type { Recommendation } from "@/lib/agent/state";
@@ -47,7 +48,9 @@ export function PaymentApprovalCard({
                   <p className="text-sm font-semibold text-ink-black">
                     {idx + 1}. {alloc.campaignName}
                   </p>
-                  <p className="mt-0.5 text-xs text-ink-mid">{alloc.reasoning}</p>
+                  <p className="mt-0.5 text-xs text-ink-mid">
+                    {alloc.reasoning}
+                  </p>
                   {trustScore !== null && (
                     <div className="mt-2">
                       <TrustScoreBar score={trustScore} />
@@ -83,12 +86,12 @@ export function PaymentApprovalCard({
       {/* Actions */}
       <div className="flex gap-3 px-5 py-4">
         <Button
-          variant="primary"
           size="lg"
           className="flex-1"
           onClick={onApprove}
-          isLoading={isLoading}
+          disabled={isLoading}
         >
+          {isLoading ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
           💳 Bayar Sekarang
         </Button>
         <Button
@@ -112,5 +115,3 @@ export function PaymentApprovalCard({
     </div>
   );
 }
-
-

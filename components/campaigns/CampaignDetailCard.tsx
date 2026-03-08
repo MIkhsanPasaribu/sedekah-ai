@@ -1,7 +1,14 @@
 import { formatRupiah, hitungPersentase } from "@/lib/utils";
 import { TrustScoreBar } from "@/components/shared/TrustScoreBadge";
-import { Button } from "@/components/shared/Button";
-import { Shield, MapPin, Building2, Calendar } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Shield,
+  MapPin,
+  Building2,
+  Calendar,
+  CheckCircle2,
+  Banknote,
+} from "lucide-react";
 import Link from "next/link";
 
 interface CampaignDetailCardProps {
@@ -22,6 +29,13 @@ interface CampaignDetailCardProps {
     description: string;
     severity: string;
   }>;
+  disbursements?: Array<{
+    id: string;
+    amount: number;
+    recipientLaz: string;
+    status: string;
+    disbursedAt: string | null;
+  }>;
 }
 
 export function CampaignDetailCard({
@@ -38,6 +52,7 @@ export function CampaignDetailCard({
   region,
   endsAt,
   fraudFlags,
+  disbursements,
 }: CampaignDetailCardProps) {
   const percentage = hitungPersentase(collectedAmount, targetAmount);
   const gapAmount = targetAmount - collectedAmount;
@@ -117,11 +132,13 @@ export function CampaignDetailCard({
 
         {/* CTA */}
         <div className="mt-5 flex gap-3">
-          <Link href="/chat" className="flex-1">
-            <Button variant="primary" size="lg" className="w-full">
-              💚 Donasi via AI Chat
-            </Button>
-          </Link>
+          <Button
+            size="lg"
+            className="w-full flex-1"
+            render={<Link href="/chat" />}
+          >
+            💚 Donasi via AI Chat
+          </Button>
         </div>
       </div>
 
@@ -173,6 +190,60 @@ export function CampaignDetailCard({
           </div>
         )}
       </div>
+
+      {/* Transparansi Dana */}
+      {disbursements && disbursements.length > 0 && (
+        <div className="rounded-2xl border border-ink-ghost bg-surface-white p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Banknote className="h-5 w-5 text-brand-green-deep" />
+            <h2 className="text-base font-bold text-ink-black">
+              Transparansi Penyaluran Dana
+            </h2>
+          </div>
+
+          <div className="mb-3 flex items-center gap-2 text-sm text-ink-mid">
+            <CheckCircle2 className="h-4 w-4 text-brand-green-light" />
+            <span>
+              {formatRupiah(
+                disbursements.reduce((sum, d) => sum + d.amount, 0),
+              )}{" "}
+              sudah disalurkan dari {formatRupiah(collectedAmount)} terkumpul
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {disbursements.map((d) => (
+              <div
+                key={d.id}
+                className="flex items-center justify-between rounded-lg bg-surface-warm p-3"
+              >
+                <div>
+                  <p className="text-sm font-medium text-ink-dark">
+                    {d.recipientLaz}
+                  </p>
+                  {d.disbursedAt && (
+                    <p className="text-xs text-ink-mid">
+                      {new Date(d.disbursedAt).toLocaleDateString("id-ID", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <p className="font-heading text-sm font-bold text-brand-green-deep">
+                    {formatRupiah(d.amount)}
+                  </p>
+                  <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                    {d.status === "verified" ? "Terverifikasi" : "Selesai"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

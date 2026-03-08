@@ -56,6 +56,18 @@ enum MessageRole {
   system
 }
 
+enum UserRole {
+  donor
+  admin
+}
+
+enum DisbursementStatus {
+  pending
+  processing
+  completed
+  verified
+}
+
 // ===== MODELS =====
 
 model User {
@@ -65,13 +77,15 @@ model User {
   name            String?
   mobile          String?
   mayarCustomerId String?
+  role            UserRole @default(donor)
   ramadhanStreak  Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  donations      Donation[]
-  givingJourney  GivingJourney[]
-  conversations  Conversation[]
+  donations       Donation[]
+  givingJourney   GivingJourney[]
+  conversations   Conversation[]
+  disbursements   Disbursement[]
 
   @@map("users")
 }
@@ -119,8 +133,9 @@ model Campaign {
   endsAt          DateTime?
   createdAt       DateTime         @default(now())
 
-  donations  Donation[]
-  fraudAlerts FraudFlag[]
+  donations      Donation[]
+  fraudAlerts    FraudFlag[]
+  disbursements  Disbursement[]
 
   @@index([category])
   @@index([isActive])
@@ -186,4 +201,26 @@ model Message {
 
   @@index([conversationId])
   @@map("messages")
+}
+
+model Disbursement {
+  id               String             @id @default(uuid())
+  campaignId       String
+  amount           Int
+  recipientLaz     String
+  recipientAccount String?
+  status           DisbursementStatus @default(pending)
+  transferProof    String?
+  notes            String?
+  disbursedAt      DateTime?
+  verifiedAt       DateTime?
+  disbursedById    String
+  createdAt        DateTime           @default(now())
+
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  disbursedBy User     @relation(fields: [disbursedById], references: [id])
+
+  @@index([campaignId])
+  @@index([status])
+  @@map("disbursements")
 }

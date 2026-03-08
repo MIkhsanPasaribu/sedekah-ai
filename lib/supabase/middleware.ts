@@ -34,7 +34,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Proteksi route: hanya /chat, /dashboard perlu auth
-  const protectedPaths = ["/chat", "/dashboard"];
+  const protectedPaths = ["/chat", "/dashboard", "/admin"];
   const isProtectedPath = protectedPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path),
   );

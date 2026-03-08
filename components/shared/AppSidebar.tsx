@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
 import {
   MessageSquare,
   LayoutDashboard,
@@ -12,6 +12,11 @@ import {
   ChevronUp,
   Plus,
   Clock,
+  Shield,
+  Banknote,
+  ArrowRightLeft,
+  Tag,
+  Trash2,
 } from "lucide-react";
 import { signOut } from "@/app/(auth)/login/actions";
 import {
@@ -41,9 +46,17 @@ const NAV_ITEMS = [
   { href: "/campaigns", label: "Kampanye", icon: Heart },
 ];
 
+const ADMIN_NAV_ITEMS = [
+  { href: "/admin", label: "Admin Panel", icon: Shield },
+  { href: "/admin/disbursements", label: "Penyaluran", icon: Banknote },
+  { href: "/admin/reconcile", label: "Rekonsiliasi", icon: ArrowRightLeft },
+  { href: "/admin/discounts", label: "Promo", icon: Tag },
+];
+
 interface AppSidebarProps {
   userName: string | null;
   userEmail: string | null;
+  userRole?: string | null;
 }
 
 interface ConversationItem {
@@ -52,9 +65,12 @@ interface ConversationItem {
   updatedAt: string;
 }
 
-export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
+export function AppSidebar({ userName, userEmail, userRole }: AppSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -69,6 +85,31 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
     }
     load();
   }, [pathname]);
+
+  const handleDelete = useCallback(
+    async (threadId: string, e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDeletingId(threadId);
+      try {
+        const res = await fetch(
+          `/api/conversations/${encodeURIComponent(threadId)}`,
+          { method: "DELETE" },
+        );
+        if (!res.ok) return;
+        setConversations((prev) => prev.filter((c) => c.threadId !== threadId));
+        // If currently viewing the deleted conversation, redirect to new chat
+        if (searchParams.get("thread") === threadId) {
+          router.push("/chat");
+        }
+      } catch {
+        // Non-fatal
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [searchParams, router],
+  );
 
   const initials = userName
     ? userName
@@ -133,6 +174,38 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* Admin Nav */}
+        {userRole === "admin" && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider">
+              <Shield className="mr-1 inline size-3" />
+              Admin
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {ADMIN_NAV_ITEMS.map((item) => {
+                  const isActive =
+                    pathname === item.href ||
+                    (item.href !== "/admin" && pathname.startsWith(item.href));
+                  const Icon = item.icon;
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        render={<Link href={item.href} />}
+                        isActive={isActive}
+                        tooltip={item.label}
+                      >
+                        <Icon className="size-4" />
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
         {/* Conversation History */}
         {conversations.length > 0 && (
           <SidebarGroup>
@@ -160,15 +233,25 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
                       "thread",
                     ) === conv.threadId;
                   return (
-                    <SidebarMenuItem key={conv.threadId}>
+                    <SidebarMenuItem key={conv.threadId} className="group/conv">
                       <SidebarMenuButton
                         render={<Link href={threadUrl} />}
                         isActive={isActive}
                         tooltip={conv.title}
+                        className="pr-8"
                       >
                         <MessageSquare className="size-4 shrink-0" />
                         <span className="truncate">{conv.title}</span>
                       </SidebarMenuButton>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDelete(conv.threadId, e)}
+                        disabled={deletingId === conv.threadId}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md p-1 opacity-0 transition-opacity group-hover/conv:opacity-100 hover:bg-sidebar-accent hover:text-destructive disabled:opacity-50"
+                        title="Hapus percakapan"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
                     </SidebarMenuItem>
                   );
                 })}
