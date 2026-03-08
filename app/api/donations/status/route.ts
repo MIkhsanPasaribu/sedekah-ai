@@ -89,9 +89,35 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
               : new Date();
           }
 
-          await prisma.donation.update({
-            where: { id: donation.id },
-            data: updateData,
+          // Update semua donations untuk invoice ini + increment campaign collectedAmount
+          const allDonations = await prisma.donation.findMany({
+            where: { mayarInvoiceId: invoiceId, status: { not: "paid" } },
+            select: { id: true, amount: true, campaignId: true },
+          });
+
+          await prisma.$transaction(async (tx) => {
+            await tx.donation.updateMany({
+              where: { mayarInvoiceId: invoiceId, status: { not: "paid" } },
+              data: updateData,
+            });
+
+            if (mappedStatus === "paid") {
+              const campaignIncrements = new Map<string, number>();
+              for (const d of allDonations) {
+                if (d.campaignId) {
+                  campaignIncrements.set(
+                    d.campaignId,
+                    (campaignIncrements.get(d.campaignId) ?? 0) + d.amount,
+                  );
+                }
+              }
+              for (const [cId, inc] of campaignIncrements) {
+                await tx.campaign.update({
+                  where: { id: cId },
+                  data: { collectedAmount: { increment: inc } },
+                });
+              }
+            }
           });
 
           currentStatus = mappedStatus;

@@ -1,17 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
-import { Button } from "@/components/shared/Button";
+import { Button } from "@/components/ui/button";
 
 interface ErrorPageProps {
   error: Error & { digest?: string };
   reset: () => void;
 }
 
-export default function GlobalError({
-  error,
-  reset,
-}: ErrorPageProps) {
+export default function GlobalError({ error, reset }: ErrorPageProps) {
   useEffect(() => {
     console.error("Global error:", error);
   }, [error]);
@@ -28,9 +25,7 @@ export default function GlobalError({
           ketidaknyamanannya.
         </p>
         <div className="mt-6 flex justify-center gap-3">
-          <Button variant="primary" onClick={reset}>
-            Coba Lagi
-          </Button>
+          <Button onClick={reset}>Coba Lagi</Button>
           <Button
             variant="outline"
             onClick={() => (window.location.href = "/")}

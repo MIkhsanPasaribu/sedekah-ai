@@ -16,12 +16,13 @@ export default async function AppLayout({
 
   let displayName: string | null = null;
   let email: string | null = null;
+  let role: string | null = null;
 
   if (user) {
     email = user.email ?? null;
     const dbUser = await prisma.user.findUnique({
       where: { authId: user.id },
-      select: { name: true, email: true },
+      select: { name: true, email: true, role: true },
     });
     displayName =
       dbUser?.name ??
@@ -30,11 +31,12 @@ export default async function AppLayout({
     if (!displayName && email) {
       displayName = email.split("@")[0];
     }
+    role = dbUser?.role ?? null;
   }
 
   return (
     <SidebarProvider>
-      <AppSidebar userName={displayName} userEmail={email} />
+      <AppSidebar userName={displayName} userEmail={email} userRole={role} />
       <SidebarInset className="min-h-screen">
         <main className="flex-1 pb-16 md:pb-0">{children}</main>
       </SidebarInset>

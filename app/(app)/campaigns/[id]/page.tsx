@@ -31,6 +31,17 @@ export default async function CampaignDetailPage({
           severity: true,
         },
       },
+      disbursements: {
+        where: { status: { in: ["completed", "verified"] } },
+        select: {
+          id: true,
+          amount: true,
+          recipientLaz: true,
+          status: true,
+          disbursedAt: true,
+        },
+        orderBy: { disbursedAt: "desc" },
+      },
     },
   });
 
@@ -60,6 +71,13 @@ export default async function CampaignDetailPage({
           region={campaign.region}
           endsAt={campaign.endsAt?.toISOString() ?? null}
           fraudFlags={campaign.fraudAlerts}
+          disbursements={campaign.disbursements.map((d) => ({
+            id: d.id,
+            amount: d.amount,
+            recipientLaz: d.recipientLaz,
+            status: d.status,
+            disbursedAt: d.disbursedAt?.toISOString() ?? null,
+          }))}
         />
       </div>
     </div>
