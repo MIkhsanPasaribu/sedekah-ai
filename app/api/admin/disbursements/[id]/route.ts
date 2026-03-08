@@ -73,6 +73,14 @@ export async function PATCH(
     updateData.notes = notes;
   }
 
+  if (body.bankName !== undefined) {
+    updateData.bankName = body.bankName;
+  }
+
+  if (body.accountHolder !== undefined) {
+    updateData.accountHolder = body.accountHolder;
+  }
+
   if (Object.keys(updateData).length === 0) {
     return NextResponse.json(
       { error: "Tidak ada data yang diupdate" },

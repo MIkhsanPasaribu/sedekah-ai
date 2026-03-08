@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth/admin";
+import { disbursementCreateSchema } from "@/lib/validations/disbursement";
 
 export const runtime = "nodejs";
 
@@ -48,22 +49,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const body = await req.json();
-  const { campaignId, amount, recipientAccount, notes } = body;
-
-  // Validasi
-  if (!campaignId || typeof campaignId !== "string") {
+  const parsed = disbursementCreateSchema.safeParse(body);
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "Campaign ID diperlukan" },
+      { error: parsed.error.issues[0]?.message ?? "Data tidak valid" },
       { status: 400 },
     );
   }
 
-  if (!amount || typeof amount !== "number" || amount <= 0) {
-    return NextResponse.json(
-      { error: "Jumlah penyaluran harus lebih dari 0" },
-      { status: 400 },
-    );
-  }
+  const {
+    campaignId,
+    lazPartnerId,
+    amount,
+    recipientAccount,
+    bankName,
+    accountHolder,
+    notes,
+  } = parsed.data;
 
   // Cek campaign exists dan hitung saldo yang belum disalurkan
   const campaign = await prisma.campaign.findUnique({
@@ -102,9 +104,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const disbursement = await prisma.disbursement.create({
     data: {
       campaignId,
+      lazPartnerId: lazPartnerId ?? null,
       amount,
       recipientLaz: campaign.laz,
       recipientAccount: recipientAccount ?? null,
+      bankName: bankName ?? null,
+      accountHolder: accountHolder ?? null,
       notes: notes ?? null,
       disbursedById: user.id,
       status: "pending",
