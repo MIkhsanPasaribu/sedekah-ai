@@ -24,6 +24,8 @@ interface DisbursementItem {
   amount: number;
   recipientLaz: string;
   recipientAccount: string | null;
+  bankName: string | null;
+  accountHolder: string | null;
   status: string;
   transferProof: string | null;
   notes: string | null;
@@ -39,11 +41,21 @@ interface CampaignOption {
   name: string;
   laz: string;
   collectedAmount: number;
+  undisbursedBalance?: number;
+}
+
+interface LazPartnerOption {
+  id: string;
+  name: string;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
 }
 
 interface DisbursementManagerProps {
   initialDisbursements: DisbursementItem[];
   campaigns: CampaignOption[];
+  lazPartners?: LazPartnerOption[];
 }
 
 // ---------- Status badge ----------
@@ -106,6 +118,7 @@ const NEXT_LABEL: Record<string, string> = {
 export function DisbursementManager({
   initialDisbursements,
   campaigns,
+  lazPartners = [],
 }: DisbursementManagerProps) {
   const [disbursements, setDisbursements] =
     useState<DisbursementItem[]>(initialDisbursements);
@@ -115,9 +128,28 @@ export function DisbursementManager({
 
   // Form state
   const [selectedCampaign, setSelectedCampaign] = useState("");
+  const [selectedLazPartner, setSelectedLazPartner] = useState("");
   const [amount, setAmount] = useState("");
   const [recipientAccount, setRecipientAccount] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [accountHolder, setAccountHolder] = useState("");
   const [notes, setNotes] = useState("");
+
+  function handleLazPartnerChange(partnerId: string) {
+    setSelectedLazPartner(partnerId);
+    if (partnerId) {
+      const partner = lazPartners.find((p) => p.id === partnerId);
+      if (partner) {
+        setBankName(partner.bankName);
+        setRecipientAccount(partner.accountNumber);
+        setAccountHolder(partner.accountHolder);
+      }
+    } else {
+      setBankName("");
+      setRecipientAccount("");
+      setAccountHolder("");
+    }
+  }
 
   async function handleCreate() {
     if (!selectedCampaign || !amount) return;
@@ -130,8 +162,11 @@ export function DisbursementManager({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           campaignId: selectedCampaign,
+          lazPartnerId: selectedLazPartner || undefined,
           amount: Number(amount),
           recipientAccount: recipientAccount || undefined,
+          bankName: bankName || undefined,
+          accountHolder: accountHolder || undefined,
           notes: notes || undefined,
         }),
       });
@@ -148,14 +183,19 @@ export function DisbursementManager({
         createdAt: data.disbursement.createdAt ?? new Date().toISOString(),
         disbursedAt: null,
         verifiedAt: null,
+        bankName: data.disbursement.bankName ?? null,
+        accountHolder: data.disbursement.accountHolder ?? null,
         disbursedBy: null,
       };
       setDisbursements((prev) => [newItem, ...prev]);
 
       // Reset form
       setSelectedCampaign("");
+      setSelectedLazPartner("");
       setAmount("");
       setRecipientAccount("");
+      setBankName("");
+      setAccountHolder("");
       setNotes("");
       setShowForm(false);
     } catch {
@@ -237,30 +277,68 @@ export function DisbursementManager({
                 <option value="">Pilih kampanye...</option>
                 {campaigns.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} — {c.laz} ({formatRupiah(c.collectedAmount)})
+                    {c.name} — {c.laz}
+                    {c.undisbursedBalance !== undefined
+                      ? ` (Saldo: ${formatRupiah(c.undisbursedBalance)})`
+                      : ` (${formatRupiah(c.collectedAmount)})`}
                   </option>
                 ))}
               </select>
             </div>
 
+            {lazPartners.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="lazPartner">LAZ Partner (opsional)</Label>
+                <select
+                  id="lazPartner"
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                  value={selectedLazPartner}
+                  onChange={(e) => handleLazPartnerChange(e.target.value)}
+                >
+                  <option value="">Pilih LAZ partner atau isi manual...</option>
+                  {lazPartners.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — {p.bankName} {p.accountNumber}
+                    </option>
+                  ))}
+                </select>
+                {selectedLazPartner && (
+                  <p className="text-xs text-muted-foreground">
+                    Data rekening otomatis terisi dari registry LAZ
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
-              <Label htmlFor="amount">Jumlah (Rp)</Label>
+              <Label htmlFor="account">No. Rekening (opsional)</Label>
               <Input
-                id="amount"
-                type="number"
-                placeholder="0"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                id="account"
+                placeholder="Nomor rekening"
+                value={recipientAccount}
+                onChange={(e) => setRecipientAccount(e.target.value)}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="account">Rekening Penerima (opsional)</Label>
+              <Label htmlFor="bankName">Nama Bank (opsional)</Label>
               <Input
-                id="account"
-                placeholder="Bank — No. Rek — Nama"
-                value={recipientAccount}
-                onChange={(e) => setRecipientAccount(e.target.value)}
+                id="bankName"
+                placeholder="Contoh: BCA, BRI, Mandiri"
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="accountHolder">
+                Nama Pemilik Rekening (opsional)
+              </Label>
+              <Input
+                id="accountHolder"
+                placeholder="Nama sesuai rekening"
+                value={accountHolder}
+                onChange={(e) => setAccountHolder(e.target.value)}
               />
             </div>
 
@@ -315,7 +393,9 @@ export function DisbursementManager({
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {d.recipientLaz}
-                    {d.recipientAccount && ` — ${d.recipientAccount}`}
+                    {d.bankName && ` — ${d.bankName}`}
+                    {d.recipientAccount && ` ${d.recipientAccount}`}
+                    {d.accountHolder && ` (${d.accountHolder})`}
                   </p>
                   {d.notes && (
                     <p className="text-xs text-muted-foreground italic">
