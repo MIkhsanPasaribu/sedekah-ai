@@ -1,0 +1,178 @@
+// ============================================================
+// LangGraph Node 5: RECOMMEND — Optimal Allocation + Reasoning
+// ============================================================
+// Alokasi optimal berdasarkan urgency + gap + donorIntent
+// Transplant RUANG HATI: Attach hadith kontekstual per rekomendasi
+
+import { AIMessage, SystemMessage } from "@langchain/core/messages";
+import type { SedekahState, Recommendation, AllocationItem } from "../state";
+import { getIslamicContextTool } from "../tools/islamic-context.tool";
+import { formatRupiah } from "@/lib/utils";
+
+export async function recommendNode(
+  state: SedekahState,
+): Promise<Partial<SedekahState>> {
+  const { campaigns, fraudScores, zakatBreakdown, donorIntent } = state;
+
+  // Tentukan total amount: gunakan kalkulasi zakat, atau nominal custom untuk sedekah/infaq
+  const totalAmount = zakatBreakdown?.totalKewajiban ?? state.customAmount ?? 0;
+
+  if (!campaigns || campaigns.length === 0) {
+    return {
+      messages: [
+        new AIMessage({
+          content:
+            "Mohon maaf, tidak ada kampanye yang bisa direkomendasikan saat ini.",
+          name: "RECOMMEND",
+        }),
+      ],
+    };
+  }
+
+  // Filter kampanye dengan trust score tinggi (>= 55)
+  const trustedCampaigns = campaigns
+    .filter((c) => {
+      const score = fraudScores[c.id]?.overallScore ?? c.trustScore;
+      return score >= 55;
+    })
+    .sort((a, b) => {
+      const scoreA = fraudScores[a.id]?.overallScore ?? a.trustScore;
+      const scoreB = fraudScores[b.id]?.overallScore ?? b.trustScore;
+      // Sort by urgency (gap to target) then trust score
+      const gapA = a.targetAmount - a.collectedAmount;
+      const gapB = b.targetAmount - b.collectedAmount;
+      return scoreB - scoreA || gapB - gapA;
+    });
+
+  if (trustedCampaigns.length === 0) {
+    return {
+      messages: [
+        new AIMessage({
+          content:
+            "⚠️ Mohon maaf, semua kampanye yang ditemukan memiliki tingkat risiko tinggi. Kami sarankan untuk menunggu kampanye terverifikasi tersedia. Keselamatan donasi Anda adalah prioritas kami. 🤲",
+          name: "RECOMMEND",
+        }),
+      ],
+    };
+  }
+
+  // Buat alokasi: max 3 kampanye teratas
+  const topCampaigns = trustedCampaigns.slice(0, 3);
+  const allocations: AllocationItem[] = [];
+
+  if (totalAmount > 0) {
+    // Distribusi berdasarkan weighted score
+    const totalScore = topCampaigns.reduce(
+      (sum, c) => sum + (fraudScores[c.id]?.overallScore ?? c.trustScore),
+      0,
+    );
+
+    for (const campaign of topCampaigns) {
+      const score =
+        fraudScores[campaign.id]?.overallScore ?? campaign.trustScore;
+      const weight = score / totalScore;
+      const amount = Math.round(totalAmount * weight);
+      const percentage = Math.round(weight * 100);
+
+      allocations.push({
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        amount,
+        percentage,
+        reasoning: `Trust Score ${score}/100 — ${campaign.laz} (${campaign.lazVerified ? "Terverifikasi" : "Belum Terverifikasi"})`,
+      });
+    }
+
+    // Sesuaikan rounding agar total tepat
+    const allocatedTotal = allocations.reduce((sum, a) => sum + a.amount, 0);
+    if (allocations.length > 0 && allocatedTotal !== totalAmount) {
+      allocations[0].amount += totalAmount - allocatedTotal;
+    }
+  } else {
+    // Untuk sedekah tanpa kalkulasi, tampilkan kampanye tanpa nominal
+    for (const campaign of topCampaigns) {
+      const score =
+        fraudScores[campaign.id]?.overallScore ?? campaign.trustScore;
+      allocations.push({
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        amount: 0,
+        percentage: 0,
+        reasoning: `Trust Score ${score}/100 — ${campaign.laz} (${campaign.lazVerified ? "Terverifikasi" : "Belum Terverifikasi"})`,
+      });
+    }
+  }
+
+  // Ambil Islamic context
+  const category = donorIntent ?? "umum";
+  const contextResult = await getIslamicContextTool.invoke({
+    category: category as
+      | "zakat"
+      | "sedekah"
+      | "yatim"
+      | "bencana"
+      | "pendidikan"
+      | "pangan"
+      | "ramadhan"
+      | "umum",
+    type: "hadith",
+  });
+  const contextData = JSON.parse(contextResult);
+  const islamicContext = contextData.success
+    ? `${contextData.quote.reference}: "${contextData.quote.translation}"`
+    : "";
+
+  const recommendation: Recommendation = {
+    allocations,
+    totalAmount,
+    reasoning: `Rekomendasi disusun berdasarkan analisis Trust Score, urgensi kebutuhan dana, dan kesesuaian dengan niat ${donorIntent ?? "donasi"} Anda.`,
+    islamicContext,
+  };
+
+  // Build message
+  const message = buildRecommendationMessage(recommendation, donorIntent);
+
+  return {
+    messages: [new AIMessage({ content: message, name: "RECOMMEND" })],
+    recommendation,
+  };
+}
+
+function buildRecommendationMessage(
+  rec: Recommendation,
+  intent: string | null,
+): string {
+  const lines: string[] = [`💡 **Rekomendasi Alokasi Donasi**\n`];
+
+  if (rec.totalAmount > 0) {
+    lines.push(`Total kewajiban zakat: **${formatRupiah(rec.totalAmount)}**\n`);
+  }
+
+  for (let i = 0; i < rec.allocations.length; i++) {
+    const alloc = rec.allocations[i];
+    const num = i + 1;
+
+    if (rec.totalAmount > 0) {
+      lines.push(
+        `**${num}. ${alloc.campaignName}**\n   💰 ${formatRupiah(alloc.amount)} (${alloc.percentage}%)\n   📊 ${alloc.reasoning}\n`,
+      );
+    } else {
+      lines.push(
+        `**${num}. ${alloc.campaignName}**\n   📊 ${alloc.reasoning}\n`,
+      );
+    }
+  }
+
+  lines.push(`---`);
+  lines.push(rec.reasoning);
+
+  if (rec.islamicContext) {
+    lines.push(`\n📖 ${rec.islamicContext}`);
+  }
+
+  lines.push(
+    `\n✅ Apakah Anda ingin **Bayar Sekarang** atau **Ubah Alokasi**?`,
+  );
+
+  return lines.join("\n");
+}
