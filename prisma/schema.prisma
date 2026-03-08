@@ -1,0 +1,153 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ===== ENUMS =====
+
+enum DonationType {
+  zakat_mal
+  zakat_fitrah
+  sedekah
+  infaq
+  wakaf
+  bencana
+}
+
+enum DonationStatus {
+  pending
+  paid
+  failed
+  expired
+}
+
+enum CampaignCategory {
+  yatim
+  bencana
+  kesehatan
+  pendidikan
+  pangan
+}
+
+enum FraudFlagType {
+  narrative_manipulation
+  financial_anomaly
+  seasonal_pattern
+  identity_unverified
+}
+
+enum FraudSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+// ===== MODELS =====
+
+model User {
+  id              String   @id @default(uuid())
+  authId          String   @unique
+  email           String   @unique
+  name            String?
+  mobile          String?
+  mayarCustomerId String?
+  ramadhanStreak  Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  donations     Donation[]
+  givingJourney GivingJourney[]
+
+  @@map("users")
+}
+
+model Donation {
+  id               String         @id @default(uuid())
+  userId           String
+  amount           Int
+  type             DonationType
+  donorIntent      String?
+  campaignId       String?
+  mayarInvoiceId   String?
+  mayarPaymentLink String?
+  status           DonationStatus @default(pending)
+  paidAt           DateTime?
+  impactScore      Int?
+  islamicContext   String?
+  reflectionSent   Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([campaignId])
+  @@index([status])
+  @@index([mayarInvoiceId])
+  @@map("donations")
+}
+
+model Campaign {
+  id              String           @id @default(uuid())
+  name            String
+  description     String
+  laz             String
+  lazVerified     Boolean          @default(false)
+  targetAmount    Int
+  collectedAmount Int              @default(0)
+  trustScore      Int              @default(0)
+  trustBreakdown  Json?
+  category        CampaignCategory
+  region          String
+  isActive        Boolean          @default(true)
+  fraudFlags      Int              @default(0)
+  endsAt          DateTime?
+  createdAt       DateTime         @default(now())
+
+  donations  Donation[]
+  fraudAlerts FraudFlag[]
+
+  @@index([category])
+  @@index([isActive])
+  @@index([trustScore])
+  @@map("campaigns")
+}
+
+model FraudFlag {
+  id          String        @id @default(uuid())
+  campaignId  String
+  flagType    FraudFlagType
+  description String
+  severity    FraudSeverity
+  detectedAt  DateTime      @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@map("fraud_flags")
+}
+
+model GivingJourney {
+  id           String   @id @default(uuid())
+  userId       String
+  ramadhanDay  Int
+  donated      Boolean  @default(false)
+  amount       Int      @default(0)
+  nudgeMessage String?
+  milestone    String?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ramadhanDay])
+  @@index([userId])
+  @@map("giving_journey")
+}
