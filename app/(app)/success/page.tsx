@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CheckCircle2, Heart, ArrowRight, Home } from "lucide-react";
+import { prisma } from "@/lib/prisma";
 
 export const metadata = {
   title: "Pembayaran Berhasil — SEDEKAH.AI",
@@ -11,20 +12,50 @@ interface SuccessPageProps {
     amount?: string;
     type?: string;
     campaign?: string;
+    invoiceId?: string;
   }>;
 }
 
-export default async function SuccessPage({
-  searchParams,
-}: SuccessPageProps) {
-  const { amount, type, campaign } = await searchParams;
+export default async function SuccessPage({ searchParams }: SuccessPageProps) {
+  const { amount, type, campaign, invoiceId } = await searchParams;
 
-  const formattedAmount = amount
+  // Try to load real donation data from DB
+  let donationData: {
+    totalAmount: number;
+    type: string | null;
+    campaignNames: string[];
+    status: string;
+  } | null = null;
+
+  if (invoiceId) {
+    const donations = await prisma.donation.findMany({
+      where: { mayarInvoiceId: invoiceId },
+      include: { campaign: { select: { name: true } } },
+    });
+    if (donations.length > 0) {
+      donationData = {
+        totalAmount: donations.reduce((sum, d) => sum + d.amount, 0),
+        type: donations[0].type,
+        campaignNames: donations
+          .map((d) => d.campaign?.name)
+          .filter((n): n is string => !!n),
+        status: donations[0].status,
+      };
+    }
+  }
+
+  const displayAmount =
+    donationData?.totalAmount ?? (amount ? Number(amount) : null);
+  const displayType = donationData?.type ?? type ?? null;
+  const displayCampaign =
+    donationData?.campaignNames.join(", ") ?? campaign ?? null;
+
+  const formattedAmount = displayAmount
     ? new Intl.NumberFormat("id-ID", {
         style: "currency",
         currency: "IDR",
         minimumFractionDigits: 0,
-      }).format(Number(amount))
+      }).format(displayAmount)
     : null;
 
   return (
@@ -55,15 +86,17 @@ export default async function SuccessPage({
             <p className="mt-1 text-3xl font-bold text-brand-green-deep">
               {formattedAmount}
             </p>
-            {type && (
+            {displayType && (
               <p className="mt-1 text-sm text-brand-green-mid capitalize">
-                {type.toLowerCase().replace(/_/g, " ")}
+                {displayType.toLowerCase().replace(/_/g, " ")}
               </p>
             )}
-            {campaign && (
+            {displayCampaign && (
               <p className="mt-2 text-sm text-ink-mid">
                 Kampanye:{" "}
-                <span className="font-medium text-ink-dark">{campaign}</span>
+                <span className="font-medium text-ink-dark">
+                  {displayCampaign}
+                </span>
               </p>
             )}
           </div>

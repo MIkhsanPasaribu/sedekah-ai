@@ -71,98 +71,144 @@ async function handlePaymentCompleted(
 ): Promise<void> {
   const { id, amount, customerEmail, paidAt } = data;
 
-  // Update donation status di database
-  const donation = await prisma.donation.findFirst({
+  // Cari semua donation records untuk invoice ini (bisa multi-allocation)
+  const donations = await prisma.donation.findMany({
     where: { mayarInvoiceId: id },
   });
 
-  if (!donation) {
+  if (donations.length === 0) {
     console.warn(`[Mayar Webhook] Donation not found for invoice: ${id}`);
     return;
   }
 
-  await prisma.donation.update({
-    where: { id: donation.id },
+  // Idempotency: skip jika semua sudah paid
+  const allPaid = donations.every((d) => d.status === "paid");
+  if (allPaid) {
+    console.log(`[Mayar Webhook] Already paid, skipping: ${id}`);
+    return;
+  }
+
+  // Update semua donation records yang belum paid
+  const pendingDonations = donations.filter((d) => d.status !== "paid");
+  await prisma.donation.updateMany({
+    where: {
+      mayarInvoiceId: id,
+      status: { not: "paid" },
+    },
     data: {
       status: "paid",
       paidAt: paidAt ? new Date(paidAt) : new Date(),
-      reflectionSent: false, // Will be sent by Impact Tracker
+      reflectionSent: false,
     },
   });
 
-  // Update user Ramadhan streak (if applicable)
-  if (donation.userId) {
+  // Update user Ramadhan streak (hanya sekali per invoice)
+  const firstDonation = donations[0];
+  if (firstDonation.userId) {
     const today = new Date();
     const ramadhanDay = getRamadhanDay(today);
 
     if (ramadhanDay > 0) {
-      // Update streak
       await prisma.user.update({
-        where: { id: donation.userId },
+        where: { id: firstDonation.userId },
         data: {
           ramadhanStreak: { increment: 1 },
         },
       });
 
-      // Create/update giving journey entry
+      // Total amount dari semua alokasi yang baru saja di-update
+      const totalAmount = pendingDonations.reduce(
+        (sum, d) => sum + d.amount,
+        0,
+      );
+
       await prisma.givingJourney.upsert({
         where: {
           userId_ramadhanDay: {
-            userId: donation.userId,
+            userId: firstDonation.userId,
             ramadhanDay,
           },
         },
         update: {
           donated: true,
-          amount: { increment: amount },
+          amount: { increment: totalAmount },
         },
         create: {
-          userId: donation.userId,
+          userId: firstDonation.userId,
           ramadhanDay,
           donated: true,
-          amount,
+          amount: totalAmount,
         },
       });
     }
   }
 
   console.log(
-    `[Mayar Webhook] Payment completed: ${id}, amount: ${amount}, email: ${customerEmail}`,
+    `[Mayar Webhook] Payment completed: ${id}, amount: ${amount}, email: ${customerEmail}, records: ${pendingDonations.length}`,
   );
+
+  // Post-payment notification: add an assistant message to the latest conversation
+  if (firstDonation.userId) {
+    const latestConversation = await prisma.conversation.findFirst({
+      where: { userId: firstDonation.userId },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    if (latestConversation) {
+      const totalAmount = pendingDonations.reduce(
+        (sum, d) => sum + d.amount,
+        0,
+      );
+      const formatted = new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+      }).format(totalAmount);
+
+      await prisma.message.create({
+        data: {
+          conversationId: latestConversation.id,
+          role: "assistant",
+          content: `✅ **Alhamdulillah! Pembayaran sebesar ${formatted} telah berhasil dikonfirmasi.**\n\nBarakallah fiik — semoga Allah melipatgandakan kebaikan Anda. 🤲\n\nAnda bisa melihat laporan dampak donasi di Dashboard.`,
+          metadata: { paymentStatus: "paid", invoiceId: id },
+        },
+      });
+    }
+  }
 }
 
 async function handlePaymentFailed(
   data: MayarWebhookEvent["data"],
 ): Promise<void> {
-  const donation = await prisma.donation.findFirst({
-    where: { mayarInvoiceId: data.id },
+  // Idempotency: hanya update yang belum di terminal state
+  const result = await prisma.donation.updateMany({
+    where: {
+      mayarInvoiceId: data.id,
+      status: { notIn: ["paid", "failed"] },
+    },
+    data: { status: "failed" },
   });
 
-  if (donation) {
-    await prisma.donation.update({
-      where: { id: donation.id },
-      data: { status: "failed" },
-    });
-  }
-
-  console.log(`[Mayar Webhook] Payment failed: ${data.id}`);
+  console.log(
+    `[Mayar Webhook] Payment failed: ${data.id}, updated: ${result.count}`,
+  );
 }
 
 async function handlePaymentExpired(
   data: MayarWebhookEvent["data"],
 ): Promise<void> {
-  const donation = await prisma.donation.findFirst({
-    where: { mayarInvoiceId: data.id },
+  // Idempotency: hanya update yang belum di terminal state
+  const result = await prisma.donation.updateMany({
+    where: {
+      mayarInvoiceId: data.id,
+      status: { notIn: ["paid", "expired"] },
+    },
+    data: { status: "expired" },
   });
 
-  if (donation) {
-    await prisma.donation.update({
-      where: { id: donation.id },
-      data: { status: "expired" },
-    });
-  }
-
-  console.log(`[Mayar Webhook] Payment expired: ${data.id}`);
+  console.log(
+    `[Mayar Webhook] Payment expired: ${data.id}, updated: ${result.count}`,
+  );
 }
 
 /**

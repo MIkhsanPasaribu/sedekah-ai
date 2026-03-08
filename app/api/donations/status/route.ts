@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+import { getInvoice } from "@/lib/mayar/invoice";
 
 export const runtime = "nodejs";
 
@@ -27,15 +28,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json(
-      { error: "Unauthorized" },
-      { status: 401 },
-    );
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const donation = await prisma.donation.findFirst({
     where: { mayarInvoiceId: invoiceId },
     select: {
+      id: true,
       status: true,
       paidAt: true,
       amount: true,
@@ -56,15 +55,58 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   // Verify ownership: hanya pemilik donasi yang boleh cek status
   if (donation.user?.authId !== user.id) {
-    return NextResponse.json(
-      { error: "Unauthorized" },
-      { status: 403 },
-    );
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
+  // Jika status masih pending, cek langsung ke Mayar API sebagai fallback
+  // (kalau webhook gagal terkirim, status di DB tetap bisa diperbarui)
+  let currentStatus = donation.status;
+  let paidAt = donation.paidAt;
+
+  if (currentStatus === "pending") {
+    try {
+      const mayarInvoice = await getInvoice(invoiceId);
+      const mayarStatus = mayarInvoice.data?.status;
+
+      if (mayarStatus && mayarStatus !== "unpaid") {
+        // Map Mayar status to our DonationStatus enum
+        const mappedStatus =
+          mayarStatus === "paid"
+            ? ("paid" as const)
+            : mayarStatus === "expired"
+              ? ("expired" as const)
+              : mayarStatus === "cancelled"
+                ? ("failed" as const)
+                : null;
+
+        if (mappedStatus) {
+          const updateData: { status: typeof mappedStatus; paidAt?: Date } = {
+            status: mappedStatus,
+          };
+          if (mappedStatus === "paid") {
+            updateData.paidAt = mayarInvoice.data?.transaction?.paidAt
+              ? new Date(mayarInvoice.data.transaction.paidAt)
+              : new Date();
+          }
+
+          await prisma.donation.update({
+            where: { id: donation.id },
+            data: updateData,
+          });
+
+          currentStatus = mappedStatus;
+          paidAt = updateData.paidAt ?? paidAt;
+        }
+      }
+    } catch (error) {
+      // Non-fatal: jika Mayar API gagal, tetap return status dari DB
+      console.error("[Donation Status] Mayar API fallback failed:", error);
+    }
   }
 
   return NextResponse.json({
-    status: donation.status,
-    paidAt: donation.paidAt?.toISOString() ?? null,
+    status: currentStatus,
+    paidAt: paidAt?.toISOString() ?? null,
     amount: donation.amount,
     type: donation.type,
     donorIntent: donation.donorIntent,

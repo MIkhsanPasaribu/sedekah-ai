@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ChatInterface } from "@/components/chat/ChatInterface";
+import { ChatPageClient } from "./ChatPageClient";
 
 export const metadata = {
   title: "Chat AI — SEDEKAH.AI",
@@ -8,7 +8,11 @@ export const metadata = {
     "Percakapan dengan Amil AI untuk menghitung zakat dan menyalurkan sedekah.",
 };
 
-export default async function ChatPage() {
+export default async function ChatPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ thread?: string }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -18,5 +22,7 @@ export default async function ChatPage() {
     redirect("/login?redirectTo=/chat");
   }
 
-  return <ChatInterface />;
+  const params = await searchParams;
+
+  return <ChatPageClient initialThreadId={params.thread ?? null} />;
 }
