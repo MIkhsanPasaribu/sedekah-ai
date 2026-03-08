@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth/admin";
 import { getPaidTransactions } from "@/lib/mayar/transaction";
+import { incrementCampaignCollected } from "@/lib/db/campaign-helpers";
 
 export const runtime = "nodejs";
 
@@ -67,19 +68,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           });
 
           // Increment collectedAmount per campaign
-          const campaignAmounts = new Map<string, number>();
-          for (const d of donations) {
-            if (!d.campaignId) continue;
-            const current = campaignAmounts.get(d.campaignId) ?? 0;
-            campaignAmounts.set(d.campaignId, current + d.amount);
-          }
-
-          for (const [campaignId, amount] of campaignAmounts) {
-            await prismaTx.campaign.update({
-              where: { id: campaignId },
-              data: { collectedAmount: { increment: amount } },
-            });
-          }
+          await incrementCampaignCollected(donations, prismaTx);
         });
 
         fixedCount += donations.length;
