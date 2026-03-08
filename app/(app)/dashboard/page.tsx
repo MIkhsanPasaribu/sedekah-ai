@@ -7,6 +7,7 @@ import {
   DEFAULT_BADGES,
 } from "@/components/dashboard/MilestoneGrid";
 import { StreakCounter } from "@/components/dashboard/StreakCounter";
+import { DailyNudgeCard } from "@/components/dashboard/DailyNudgeCard";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -188,16 +189,13 @@ export default async function DashboardPage() {
 
         {/* Daily Nudge — Pesan AI Harian */}
         {dailyNudge && ramadhanDay > 0 && (
-          <div className="mb-6 rounded-xl border border-brand-gold-pale bg-brand-gold-ghost/60 p-4">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">{donatedToday ? "💚" : "🌙"}</span>
-              <div>
-                <p className="text-sm font-heading font-semibold text-brand-gold-deep">
-                  Hari ke-{ramadhanDay} Ramadhan
-                </p>
-                <p className="mt-1 text-sm text-ink-dark">{dailyNudge}</p>
-              </div>
-            </div>
+          <div className="mb-6">
+            <DailyNudgeCard
+              ramadhanDay={ramadhanDay}
+              donatedToday={donatedToday}
+              nudgeMessage={dailyNudge}
+              streak={streak}
+            />
           </div>
         )}
 

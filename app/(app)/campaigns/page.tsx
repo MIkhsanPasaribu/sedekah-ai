@@ -1,6 +1,7 @@
 import { CampaignCard } from "@/components/campaigns/CampaignCard";
 import { CampaignFilter } from "@/components/campaigns/CampaignFilter";
 import { prisma } from "@/lib/prisma";
+import Link from "next/link";
 
 export const metadata = {
   title: "Kampanye — SEDEKAH.AI",
@@ -49,14 +50,22 @@ export default async function CampaignsPage({
     <div className="min-h-screen bg-surface-warm">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-heading font-bold text-ink-black sm:text-3xl">
-            Kampanye Terverifikasi 🛡️
-          </h1>
-          <p className="mt-1 text-sm text-ink-mid">
-            Setiap kampanye telah dianalisis oleh Fraud Shield AI untuk keamanan
-            donasi Anda.
-          </p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-heading font-bold text-ink-black sm:text-3xl">
+              Kampanye Terverifikasi 🛡️
+            </h1>
+            <p className="mt-1 text-sm text-ink-mid">
+              Setiap kampanye telah dianalisis oleh Fraud Shield AI untuk
+              keamanan donasi Anda.
+            </p>
+          </div>
+          <Link
+            href="/campaigns/new"
+            className="shrink-0 rounded-lg bg-brand-green-deep px-4 py-2 text-sm font-medium text-white hover:bg-brand-green-mid transition"
+          >
+            + Buat Kampanye
+          </Link>
         </div>
 
         {/* Filter */}

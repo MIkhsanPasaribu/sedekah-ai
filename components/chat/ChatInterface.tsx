@@ -10,6 +10,7 @@ import { ZakatBreakdownCard } from "./ZakatBreakdownCard";
 import { PostPaymentReflection } from "./PostPaymentReflection";
 import { MuhasabahModal } from "@/components/shared/MuhasabahModal";
 import { IslamicLoadingSpinner } from "@/components/shared/IslamicLoadingSpinner";
+import { AgentProgressBar } from "./AgentProgressBar";
 import type {
   Recommendation,
   ImpactReport,
@@ -183,8 +184,8 @@ export function ChatInterface({
               timestamp: new Date(),
             },
           ]);
-          // Tampilkan modal muhasabah setelah jeda singkat
-          setTimeout(() => setShowMuhasabah(true), 2000);
+          // Tampilkan modal muhasabah setelah 30 detik refleksi
+          setTimeout(() => setShowMuhasabah(true), 30_000);
         } else if (data.status === "failed" || data.status === "expired") {
           clearInterval(intervalId);
           setAgentState((prev) => ({ ...prev, paymentStatus: data.status }));
@@ -394,10 +395,7 @@ export function ChatInterface({
         {isLoading && !showIslamicSpinner && (
           <div className="mx-auto max-w-3xl px-4 py-4">
             {nodeProgress ? (
-              <div className="flex items-center gap-3 rounded-xl bg-white/80 px-4 py-3 w-fit shadow-sm">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-brand-green-mid" />
-                <span className="text-sm text-ink-mid">{nodeProgress}</span>
-              </div>
+              <AgentProgressBar currentLabel={nodeProgress} />
             ) : (
               <MessageBubble role="assistant" content="" isLoading />
             )}
