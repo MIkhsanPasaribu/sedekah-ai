@@ -1,9 +1,9 @@
 // ============================================================
 // LangGraph — Graph Assembly (StateGraph)
 // ============================================================
-// 7-node sequential flow: INTAKE → CALCULATE → RESEARCH →
+// 8-node flow: SUPERVISOR → INTAKE → CALCULATE → RESEARCH →
 // FRAUD_DETECTOR → RECOMMEND → PAYMENT_EXECUTOR → IMPACT_TRACKER
-// With interrupt before PAYMENT_EXECUTOR
+// With supervisor-based intent routing and interrupt before PAYMENT_EXECUTOR
 
 import {
   StateGraph,
@@ -44,6 +44,7 @@ import { fraudDetectorNode } from "./nodes/fraud";
 import { recommendNode } from "./nodes/recommend";
 import { paymentExecutorNode } from "./nodes/payment";
 import { impactTrackerNode } from "./nodes/impact";
+import { supervisorNode } from "./nodes/supervisor";
 
 // ---------- Router Functions ----------
 
@@ -126,16 +127,36 @@ function routeAfterPayment(state: SedekahState): string {
   return "IMPACT_TRACKER"; // Show projected impact even if still "pending"
 }
 
-// ---------- Latency Instrumentation ----------
+// ---------- Resilience + Latency Instrumentation ----------
+
+/** User-friendly fallback messages per node (Bahasa Indonesia) */
+const NODE_FALLBACK_MESSAGES: Record<string, string> = {
+  INTAKE:
+    "Mohon maaf, saya belum bisa memproses pesan Anda saat ini. Silakan coba lagi. 🤲",
+  CALCULATE:
+    "Mohon maaf, terjadi kendala saat menghitung zakat. Silakan ulangi dengan data yang sama. 🤲",
+  RESEARCH:
+    "Mohon maaf, pencarian kampanye sedang terganggu. Saya tetap melanjutkan proses. 🤲",
+  FRAUD_DETECTOR:
+    "Analisis keamanan kampanye sedang tidak tersedia. Saya tetap menampilkan rekomendasi. 🤲",
+  RECOMMEND:
+    "Mohon maaf, terjadi kendala saat menyusun rekomendasi. Silakan coba lagi. 🤲",
+  PAYMENT_EXECUTOR:
+    "Mohon maaf, terjadi kendala saat memproses pembayaran. Silakan coba beberapa saat lagi. 🤲",
+  IMPACT_TRACKER:
+    "Laporan dampak sedang tidak tersedia. Anda bisa melihatnya nanti di Dashboard. 🤲",
+};
 
 /**
- * Wrap a node function with performance timing.
- * Logs [Node] INTAKE: 1234ms to console (and LangSmith captures via trace).
+ * Wrap a node function with resilience (error recovery) + performance timing.
+ * On success: logs latency.
+ * On failure: logs error, returns a fallback AIMessage so the chain can continue
+ * or end gracefully instead of crashing.
  */
-function withLatency<S, R>(
+function withResilience<S extends { messages?: unknown[] }, R>(
   name: string,
   fn: (state: S) => R,
-): (state: S) => R extends Promise<infer U> ? Promise<U> : Promise<R> {
+): (state: S) => Promise<Partial<SedekahState>> {
   return (async (state: S) => {
     const start = performance.now();
     try {
@@ -145,8 +166,26 @@ function withLatency<S, R>(
       return result;
     } catch (error) {
       const ms = Math.round(performance.now() - start);
-      console.error(`[Node] ${name}: FAILED after ${ms}ms`);
-      throw error;
+      const errorMsg =
+        error instanceof Error ? error.message : "Unknown error";
+      console.error(
+        `[Node] ${name}: FAILED after ${ms}ms — ${errorMsg}`,
+        error,
+      );
+
+      const fallbackText =
+        NODE_FALLBACK_MESSAGES[name] ??
+        "Mohon maaf, terjadi kendala teknis. Silakan coba lagi. 🤲";
+
+      // Return a fallback partial state with a friendly message
+      return {
+        messages: [
+          new AIMessage({
+            content: fallbackText,
+            name,
+          }),
+        ],
+      } as Partial<SedekahState>;
     }
   }) as never;
 }
@@ -155,21 +194,23 @@ function withLatency<S, R>(
 
 export function buildSedekahGraph(checkpointer: MemorySaver) {
   const graph = new StateGraph(SedekahStateAnnotation)
-    // Add nodes (wrapped with latency instrumentation)
-    .addNode("INTAKE", withLatency("INTAKE", intakeNode))
-    .addNode("CALCULATE", withLatency("CALCULATE", calculateNode))
-    .addNode("RESEARCH", withLatency("RESEARCH", researchNode))
-    .addNode("FRAUD_DETECTOR", withLatency("FRAUD_DETECTOR", fraudDetectorNode))
-    .addNode("RECOMMEND", withLatency("RECOMMEND", recommendNode))
+    // Add nodes (wrapped with resilience instrumentation)
+    .addNode("SUPERVISOR", withResilience("SUPERVISOR", supervisorNode))
+    .addNode("INTAKE", withResilience("INTAKE", intakeNode))
+    .addNode("CALCULATE", withResilience("CALCULATE", calculateNode))
+    .addNode("RESEARCH", withResilience("RESEARCH", researchNode))
+    .addNode("FRAUD_DETECTOR", withResilience("FRAUD_DETECTOR", fraudDetectorNode))
+    .addNode("RECOMMEND", withResilience("RECOMMEND", recommendNode))
     .addNode("PAYMENT_APPROVAL", paymentApprovalNode)
     .addNode(
       "PAYMENT_EXECUTOR",
-      withLatency("PAYMENT_EXECUTOR", paymentExecutorNode),
+      withResilience("PAYMENT_EXECUTOR", paymentExecutorNode),
     )
-    .addNode("IMPACT_TRACKER", withLatency("IMPACT_TRACKER", impactTrackerNode))
+    .addNode("IMPACT_TRACKER", withResilience("IMPACT_TRACKER", impactTrackerNode))
 
-    // Add edges
-    .addEdge(START, "INTAKE")
+    // Add edges — SUPERVISOR routes based on intent
+    .addEdge(START, "SUPERVISOR")
+    .addEdge("SUPERVISOR", "INTAKE")
     .addConditionalEdges("INTAKE", routeAfterIntake, {
       CALCULATE: "CALCULATE",
       [END]: END,
