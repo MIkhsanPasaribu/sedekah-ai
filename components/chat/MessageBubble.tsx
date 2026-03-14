@@ -13,6 +13,8 @@ interface MessageBubbleProps {
   content: string;
   timestamp?: Date;
   isLoading?: boolean;
+  /** When true, shows a blinking cursor at the end to indicate live generation */
+  isStreaming?: boolean;
 }
 
 export function MessageBubble({
@@ -20,6 +22,7 @@ export function MessageBubble({
   content,
   timestamp,
   isLoading,
+  isStreaming,
 }: MessageBubbleProps) {
   const isUser = role === "user";
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -88,7 +91,7 @@ export function MessageBubble({
                 })}
               </span>
             )}
-            {!isUser && !isLoading && content && (
+            {!isUser && !isLoading && !isStreaming && content && (
               <button
                 onClick={handleSpeak}
                 title={isSpeaking ? "Hentikan" : "Dengarkan"}
@@ -119,6 +122,9 @@ export function MessageBubble({
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {content}
               </ReactMarkdown>
+              {isStreaming && (
+                <span className="inline-block h-4 w-1.5 animate-pulse rounded-sm bg-brand-green-deep ml-0.5 align-text-bottom" />
+              )}
             </div>
           )}
         </div>
