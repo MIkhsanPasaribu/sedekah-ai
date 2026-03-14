@@ -12,16 +12,29 @@ import {
   interrupt,
   MemorySaver,
 } from "@langchain/langgraph";
+import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { AIMessage } from "@langchain/core/messages";
 import { SedekahStateAnnotation } from "./state";
 import type { SedekahState } from "./state";
 
-// Singleton in-memory checkpointer — required for interrupt() to work
-let _checkpointer: MemorySaver | null = null;
-function getCheckpointer(): MemorySaver {
-  if (!_checkpointer) _checkpointer = new MemorySaver();
-  return _checkpointer;
+// Async checkpointer: try PostgresSaver first, fall back to in-memory MemorySaver
+async function getCheckpointer(): Promise<MemorySaver> {
+  try {
+    const saver = PostgresSaver.fromConnString(process.env.DATABASE_URL!);
+    await saver.setup();
+    console.log("[LangGraph] Postgres checkpointer initialized");
+    return saver as unknown as MemorySaver;
+  } catch (error) {
+    console.warn(
+      "[LangGraph] Postgres checkpointer unavailable, using MemorySaver:",
+      error,
+    );
+    return new MemorySaver();
+  }
 }
+
+// Eagerly initialize at module load so first request is fast
+const _checkpointerPromise = getCheckpointer();
 
 // Import all nodes
 import { intakeNode } from "./nodes/intake";
@@ -140,7 +153,7 @@ function withLatency<S, R>(
 
 // ---------- Build Graph ----------
 
-export function buildSedekahGraph() {
+export function buildSedekahGraph(checkpointer: MemorySaver) {
   const graph = new StateGraph(SedekahStateAnnotation)
     // Add nodes (wrapped with latency instrumentation)
     .addNode("INTAKE", withLatency("INTAKE", intakeNode))
@@ -179,23 +192,30 @@ export function buildSedekahGraph() {
     .addEdge("IMPACT_TRACKER", END);
 
   return graph.compile({
-    checkpointer: getCheckpointer(),
+    checkpointer,
   });
 }
 
-// Singleton compiled graph
-let _compiledGraph: ReturnType<typeof buildSedekahGraph> | null = null;
+// Async singleton compiled graph
+let _compiledGraphPromise: Promise<
+  ReturnType<typeof buildSedekahGraph>
+> | null = null;
 
-export function getSedekahGraph(): ReturnType<typeof buildSedekahGraph> {
-  if (!_compiledGraph) {
-    // Konfirmasi LangSmith tracing saat graph pertama kali dibuat
-    const tracingEnabled = process.env.LANGCHAIN_TRACING_V2 === "true";
-    const project = process.env.LANGCHAIN_PROJECT ?? "(default)";
-    console.log(
-      `[LangGraph] Tracing: ${tracingEnabled ? "ENABLED" : "DISABLED"} | Project: ${project}`,
-    );
-
-    _compiledGraph = buildSedekahGraph();
+export async function getSedekahGraph(): Promise<
+  ReturnType<typeof buildSedekahGraph>
+> {
+  if (!_compiledGraphPromise) {
+    _compiledGraphPromise = (async () => {
+      const tracingEnabled = process.env.LANGCHAIN_TRACING_V2 === "true";
+      const project = process.env.LANGCHAIN_PROJECT ?? "(default)";
+      console.log(
+        `[LangGraph] Tracing: ${
+          tracingEnabled ? "ENABLED" : "DISABLED"
+        } | Project: ${project}`,
+      );
+      const checkpointer = await _checkpointerPromise;
+      return buildSedekahGraph(checkpointer);
+    })();
   }
-  return _compiledGraph;
+  return _compiledGraphPromise;
 }
