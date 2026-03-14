@@ -132,6 +132,29 @@ export function getTrustScoreLabel(score: number): string {
 // Ramadhan Helpers
 // ============================================================
 
+// Per-category cost-per-beneficiary rates (in Rupiah)
+const BENEFICIARY_RATES: Record<string, number> = {
+  yatim: 200_000,
+  bencana: 100_000,
+  kesehatan: 150_000,
+  pangan: 10_000,
+  pendidikan: 250_000,
+};
+const DEFAULT_BENEFICIARY_RATE = 50_000;
+
+/**
+ * Estimate the number of beneficiaries for a donation based on its category.
+ * Uses per-category cost-per-beneficiary rates; falls back to Rp50k default.
+ */
+export function estimateBeneficiaries(
+  amount: number,
+  category: string,
+): number {
+  const rate =
+    BENEFICIARY_RATES[category.toLowerCase()] ?? DEFAULT_BENEFICIARY_RATE;
+  return Math.max(0, Math.floor(amount / rate));
+}
+
 /**
  * Generates a contextual daily nudge message based on the current Ramadhan day.
  * Returns null if outside of Ramadhan (ramadhanDay <= 0).
