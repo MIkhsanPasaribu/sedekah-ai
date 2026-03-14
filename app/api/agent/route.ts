@@ -3,34 +3,21 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { Command } from "@langchain/langgraph";
 import { getSedekahGraph } from "@/lib/agent/graph";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimitPersistent } from "@/lib/rate-limiter";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// ── In-memory rate limiter (10 requests per 5 minutes per user) ──────────────
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_MAX = 10;
-const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
-
-function checkRateLimit(userId: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(userId);
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return true;
-  }
-  if (entry.count >= RATE_LIMIT_MAX) return false;
-  entry.count += 1;
-  return true;
-}
+// Rate limiting uses DB-backed persistent storage (see lib/rate-limiter.ts)
 
 /** Node name → user-facing label */
 const NODE_LABELS: Record<string, string> = {
+  SUPERVISOR: "Memahami permintaan Anda...",
   INTAKE: "Memahami niat Anda...",
   CALCULATE: "Menghitung zakat...",
   RESEARCH: "Mencari kampanye terpercaya...",
@@ -65,8 +52,9 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
     }
 
-    // Rate limiting
-    if (!checkRateLimit(user.id)) {
+    // Rate limiting (persistent, DB-backed)
+    const allowed = await checkRateLimitPersistent(user.id);
+    if (!allowed) {
       return NextResponse.json(
         { error: "Terlalu banyak permintaan. Mohon tunggu beberapa menit." },
         { status: 429 },
@@ -138,14 +126,44 @@ export async function POST(req: NextRequest): Promise<Response> {
           },
         });
       }
+
+      // --- Conversation History Memory (#6) ---
+      // Load recent messages from DB for multi-turn awareness
+      let historyContext: string | null = null;
+      if (conversation) {
+        const recentMessages = await prisma.message.findMany({
+          where: { conversationId: conversation.id },
+          orderBy: { createdAt: "desc" },
+          take: 6, // 5 previous + the one we just saved
+          skip: 1, // Skip the one we just created
+          select: { role: true, content: true },
+        });
+
+        if (recentMessages.length > 0) {
+          historyContext = recentMessages
+            .reverse()
+            .map((m) => `${m.role === "user" ? "Donatur" : "Amil AI"}: ${m.content.slice(0, 200)}`)
+            .join("\n");
+        }
+      }
+
+      const graphMessages = historyContext
+        ? [
+            new SystemMessage(
+              `Ringkasan percakapan sebelumnya:\n${historyContext}\n\nLanjutkan percakapan dengan mempertimbangkan konteks di atas.`,
+            ),
+            new HumanMessage(lastMessage.content),
+          ]
+        : [new HumanMessage(lastMessage.content)];
+
       graphInput = {
-        messages: [new HumanMessage(lastMessage.content)],
+        messages: graphMessages,
         donorName,
         donorEmail,
       };
     }
 
-    // --- SSE Streaming ---
+    // --- SSE Streaming with Token-Level Events ---
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
@@ -161,22 +179,41 @@ export async function POST(req: NextRequest): Promise<Response> {
         try {
           send("thread", { threadId: resolvedThreadId });
 
-          // Stream graph execution — streamMode "updates" gives us per-node outputs
-          const eventStream = await graph.stream(graphInput, {
+          // Use streamEvents for token-level streaming —
+          // this gives us both node progress AND individual LLM tokens
+          const eventStream = graph.streamEvents(graphInput, {
             ...config,
-            streamMode: "updates",
+            version: "v2",
           });
 
-          let lastNodeResult: Record<string, unknown> = {};
-          for await (const chunk of eventStream) {
-            // chunk is { NodeName: { ...partialState } }
-            for (const [nodeName, nodeOutput] of Object.entries(chunk)) {
-              const label = NODE_LABELS[nodeName] ?? nodeName;
-              send("node", { node: nodeName, label });
-              lastNodeResult = {
-                ...lastNodeResult,
-                ...(nodeOutput as Record<string, unknown>),
-              };
+          let currentNode = "";
+          const tokenBuffer: string[] = [];
+
+          for await (const event of eventStream) {
+            const eventKind: string = event.event;
+
+            // Track which node is currently executing
+            if (eventKind === "on_chain_start" && event.name) {
+              const nodeName = event.name;
+              if (NODE_LABELS[nodeName]) {
+                currentNode = nodeName;
+                const label = NODE_LABELS[nodeName];
+                send("node", { node: nodeName, label });
+              }
+            }
+
+            // Token-level streaming: emit each LLM token chunk
+            if (
+              eventKind === "on_chat_model_stream" &&
+              event.data?.chunk
+            ) {
+              const chunk = event.data.chunk;
+              const content =
+                typeof chunk.content === "string" ? chunk.content : "";
+              if (content) {
+                tokenBuffer.push(content);
+                send("token", { content, node: currentNode });
+              }
             }
           }
 
