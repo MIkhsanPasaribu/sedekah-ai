@@ -99,7 +99,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       });
     }
 
-    const graph = getSedekahGraph();
+    const graph = await getSedekahGraph();
 
     // Prepare graph input
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
