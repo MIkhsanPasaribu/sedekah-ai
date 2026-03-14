@@ -22,7 +22,7 @@ async function generateSummary(props: CampaignAiSummaryProps): Promise<string> {
   );
 
   const llm = new ChatGroq({
-    model: "qwen/qwen3-32b",
+    model: "meta-llama/llama-4-scout-17b-16e-instruct",
     temperature: 0.7,
     apiKey: process.env.GROQ_API_KEY,
   });

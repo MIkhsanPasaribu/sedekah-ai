@@ -11,7 +11,7 @@ import { getDailyNudge } from "@/lib/utils";
 import { sanitizeCardNarrativeOutput } from "@/lib/agent/utils";
 
 const nudgeLlm = new ChatGroq({
-  model: "qwen/qwen3-32b",
+  model: "meta-llama/llama-4-scout-17b-16e-instruct",
   temperature: 0.7,
   apiKey: process.env.GROQ_API_KEY,
 });

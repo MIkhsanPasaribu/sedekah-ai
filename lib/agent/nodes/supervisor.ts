@@ -20,15 +20,11 @@ const intentSchema = z.object({
     .describe(
       "Intent user: 'donation' jika ingin donasi/zakat/sedekah/infaq/wakaf, 'info' jika bertanya tentang fitur/cara kerja/kampanye tanpa niat donasi, 'greeting' jika hanya menyapa",
     ),
-  confidence: z
-    .number()
-    .min(0)
-    .max(1)
-    .describe("Confidence level 0-1"),
+  confidence: z.number().min(0).max(1).describe("Confidence level 0-1"),
 });
 
 const classifierLlm = new ChatGroq({
-  model: "qwen/qwen3-32b",
+  model: "meta-llama/llama-4-scout-17b-16e-instruct",
   temperature: 0,
   apiKey: process.env.GROQ_API_KEY,
 }).withStructuredOutput(intentSchema);

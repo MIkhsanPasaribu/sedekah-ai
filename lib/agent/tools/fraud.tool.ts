@@ -33,7 +33,7 @@ const analyzeFraudSchema = z.object({
 });
 
 const narrativeAnalysisLlm = new ChatGroq({
-  model: "qwen/qwen3-32b",
+  model: "meta-llama/llama-4-scout-17b-16e-instruct",
   temperature: 0,
   apiKey: process.env.GROQ_API_KEY,
 }).withStructuredOutput(

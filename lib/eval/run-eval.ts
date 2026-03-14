@@ -240,7 +240,10 @@ export async function runEvaluation(
       forbiddenWordsEvaluator,
     ],
     experimentPrefix: "sedekah-ai",
-    metadata: { version: "1.0", model: "qwen/qwen3-32b" },
+    metadata: {
+      version: "1.0",
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+    },
   });
 
   console.log(`\n✅ Evaluation complete. Results summary:`);
