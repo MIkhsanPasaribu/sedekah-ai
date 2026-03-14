@@ -67,6 +67,19 @@ export function ChatInterface({
   const [nodeProgress, setNodeProgress] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pollStartRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
+  const historyAbortRef = useRef<AbortController | null>(null);
+  const sseAbortRef = useRef<AbortController | null>(null);
+
+  // Mark unmounted to prevent setState after unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      historyAbortRef.current?.abort();
+      sseAbortRef.current?.abort();
+    };
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -83,10 +96,15 @@ export function ChatInterface({
     if (!initialThreadId) return;
 
     async function loadHistory() {
+      historyAbortRef.current?.abort();
+      const controller = new AbortController();
+      historyAbortRef.current = controller;
+
       setIsLoadingHistory(true);
       try {
         const res = await fetch(
           `/api/conversations/${encodeURIComponent(initialThreadId!)}/messages`,
+          { signal: controller.signal },
         );
         if (!res.ok) return;
         const data = await res.json();
@@ -207,13 +225,21 @@ export function ChatInterface({
       }
     }, POLL_INTERVAL);
 
-    return () => clearInterval(intervalId);
+    return () => {
+      clearInterval(intervalId);
+      pollStartRef.current = null;
+    };
   }, [agentState.invoiceId, agentState.paymentStatus]);
 
   async function sendMessage(
     content: string,
     opts?: { action?: "approve" | "edit" },
   ): Promise<void> {
+    // Abort any in-flight SSE request before starting a new one
+    sseAbortRef.current?.abort();
+    const sseController = new AbortController();
+    sseAbortRef.current = sseController;
+
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: "user",
@@ -225,10 +251,12 @@ export function ChatInterface({
     setIsLoading(true);
     setNodeProgress(null);
 
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
       const response = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: sseController.signal,
         body: JSON.stringify({
           messages: [...messages, userMessage].map((m) => ({
             role: m.role,
@@ -254,7 +282,7 @@ export function ChatInterface({
       }
 
       // Parse SSE stream
-      const reader = response.body.getReader();
+      reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
 
@@ -307,17 +335,25 @@ export function ChatInterface({
           }
         }
       }
-    } catch {
-      const errorMessage: Message = {
-        id: `error-${Date.now()}`,
-        role: "assistant",
-        content: "Maaf, koneksi terputus. Silakan coba lagi. 🤲",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+    } catch (err) {
+      // Ignore AbortError (user navigated away or started new message)
+      if (err instanceof Error && err.name === "AbortError") return;
+      await reader?.cancel();
+      if (isMountedRef.current) {
+        const errorMessage: Message = {
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          content: "Maaf, koneksi terputus. Silakan coba lagi. 🤲",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      }
     } finally {
-      setIsLoading(false);
-      setNodeProgress(null);
+      await reader?.cancel();
+      if (isMountedRef.current) {
+        setIsLoading(false);
+        setNodeProgress(null);
+      }
     }
   }
 

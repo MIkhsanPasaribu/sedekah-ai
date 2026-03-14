@@ -62,7 +62,10 @@ export function QuickActions({ onSelect }: QuickActionsProps) {
         </p>
       </div>
 
-      <div className="mt-8 grid w-full max-w-xl grid-cols-2 gap-2.5 sm:grid-cols-3">
+      <div
+        id="chat-quick-actions"
+        className="mt-8 grid w-full max-w-xl grid-cols-2 gap-2.5 sm:grid-cols-3"
+      >
         {QUICK_ACTIONS.map((action) => (
           <button
             key={action.label}

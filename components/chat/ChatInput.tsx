@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef, FormEvent } from "react";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useVoiceChat } from "@/hooks/useVoiceChat";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -17,6 +18,17 @@ export function ChatInput({
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const { isListening, isSupported, startListening, stopListening } =
+    useVoiceChat({
+      onResult: (text) => {
+        setInput((prev) => (prev ? `${prev} ${text}` : text));
+        if (textareaRef.current) {
+          textareaRef.current.style.height = "auto";
+          textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
+        }
+      },
+    });
 
   function handleSubmit(e: FormEvent): void {
     e.preventDefault();
@@ -50,7 +62,10 @@ export function ChatInput({
   }
 
   return (
-    <div className="border-t border-ink-ghost/50 bg-surface-warm px-3 py-3 sm:px-4 sm:py-4">
+    <div
+      id="chat-input"
+      className="border-t border-ink-ghost/50 bg-surface-warm px-3 py-3 sm:px-4 sm:py-4"
+    >
       <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
         <div className="relative flex items-end rounded-2xl border border-ink-ghost/60 bg-surface-white shadow-sm transition-all focus-within:border-brand-green-light focus-within:shadow-md">
           <textarea
@@ -68,6 +83,25 @@ export function ChatInput({
               "disabled:opacity-50",
             )}
           />
+          {isSupported && (
+            <button
+              type="button"
+              onClick={isListening ? stopListening : startListening}
+              className={cn(
+                "m-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-all",
+                isListening
+                  ? "bg-danger/20 text-danger animate-pulse"
+                  : "bg-ink-ghost/30 text-ink-mid hover:bg-ink-ghost/60",
+              )}
+              title={isListening ? "Hentikan rekaman" : "Bicara sekarang"}
+            >
+              {isListening ? (
+                <MicOff className="h-4 w-4" />
+              ) : (
+                <Mic className="h-4 w-4" />
+              )}
+            </button>
+          )}
           <button
             type="submit"
             disabled={!input.trim() || isLoading}

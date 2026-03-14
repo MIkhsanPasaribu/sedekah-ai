@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { formatRupiah } from "@/lib/utils";
+import { getDonationReflection } from "@/lib/islamic-quotes";
 
 interface PostPaymentReflectionProps {
   amount: number;
@@ -9,40 +10,19 @@ interface PostPaymentReflectionProps {
   islamicContext: string | null;
 }
 
-const REFLECTION_MESSAGES: Record<string, string> = {
-  zakat_mal:
-    "Anda telah menunaikan kewajiban zakat harta. Harta yang dizakati menjadi harta yang bersih dan penuh berkah.",
-  zakat_fitrah:
-    "Zakat fitrah Anda menyucikan puasa Ramadhan dan membahagiakan saudara kita yang membutuhkan di hari raya.",
-  sedekah:
-    "Sedekah Anda adalah cahaya yang menerangi jalan Anda di dunia dan akhirat. Setiap rupiah membawa doa.",
-  infaq:
-    "Infaq Anda di jalan Allah menjadi investasi abadi. Tidak ada kebaikan yang sia-sia di sisi-Nya.",
-  wakaf:
-    "Wakaf Anda menjadi amal jariyah yang pahalanya terus mengalir bahkan saat Anda tertidur.",
-  bencana:
-    "Bantuan Anda meringankan beban saudara kita yang tertimpa musibah. Allah mencintai hamba yang saling menolong.",
-};
-
-const DEFAULT_REFLECTION =
-  "Setiap rupiah sedekah yang Anda keluarkan adalah bukti keimanan dan kasih sayang kepada sesama.";
-
 export function PostPaymentReflection({
   amount,
   donorIntent,
   islamicContext,
 }: PostPaymentReflectionProps) {
-  const reflection =
-    (donorIntent && REFLECTION_MESSAGES[donorIntent]) ?? DEFAULT_REFLECTION;
+  const reflection = getDonationReflection(donorIntent);
 
   return (
     <div className="mx-4 my-3 overflow-hidden rounded-2xl border border-brand-green-pale bg-gradient-to-b from-brand-green-ghost to-white shadow-md">
       {/* Header */}
       <div className="bg-gradient-to-r from-brand-green-deep to-brand-green-mid px-5 py-4 text-center">
         <p className="text-3xl">🤲</p>
-        <h3 className="mt-1 text-lg font-bold text-white">
-          Barakallah Fiik!
-        </h3>
+        <h3 className="mt-1 text-lg font-bold text-white">Barakallah Fiik!</h3>
         <p className="mt-1 text-sm text-brand-green-ghost">
           Pembayaran Anda telah berhasil dikonfirmasi
         </p>

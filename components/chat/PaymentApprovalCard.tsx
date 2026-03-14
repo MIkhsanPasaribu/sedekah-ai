@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { TrustScoreBar } from "@/components/shared/TrustScoreBadge";
+import { DiscountBanner } from "./DiscountBanner";
 import { formatRupiah } from "@/lib/utils";
 import type { Recommendation } from "@/lib/agent/state";
 
@@ -11,16 +12,6 @@ interface PaymentApprovalCardProps {
   onApprove: () => void;
   onEdit: () => void;
   isLoading?: boolean;
-}
-
-/** Extract trust score from alloc.trustScore or fall back to parsing reasoning string */
-function extractTrustScore(alloc: {
-  trustScore?: number;
-  reasoning: string;
-}): number | null {
-  if (alloc.trustScore !== undefined) return alloc.trustScore;
-  const match = alloc.reasoning.match(/Trust Score (\d+)\/100/);
-  return match ? parseInt(match[1], 10) : null;
 }
 
 export function PaymentApprovalCard({
@@ -44,7 +35,7 @@ export function PaymentApprovalCard({
       {/* Allocations */}
       <div className="divide-y divide-ink-ghost px-5 py-3">
         {recommendation.allocations.map((alloc, idx) => {
-          const trustScore = extractTrustScore(alloc);
+          const trustScore = alloc.trustScore ?? null;
           return (
             <div key={alloc.campaignId} className="py-3">
               <div className="flex items-start justify-between gap-4">
@@ -85,6 +76,11 @@ export function PaymentApprovalCard({
             {formatRupiah(recommendation.totalAmount)}
           </span>
         </div>
+      </div>
+
+      {/* Discount Banner */}
+      <div className="px-2 pt-2">
+        <DiscountBanner />
       </div>
 
       {/* Actions */}

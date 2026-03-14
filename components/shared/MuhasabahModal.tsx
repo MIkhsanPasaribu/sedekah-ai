@@ -1,47 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { REFLECTIONS } from "@/lib/islamic-quotes";
 
 interface MuhasabahModalProps {
   /** Modal ditampilkan ketika `open` berubah jadi true */
   open: boolean;
   onClose: () => void;
 }
-
-const REFLECTIONS = [
-  {
-    ayat: "إِنَّ اللَّهَ لَا يُضِيعُ أَجْرَ الْمُحْسِنِينَ",
-    translation:
-      "Sesungguhnya Allah tidak menyia-nyiakan pahala orang-orang yang berbuat baik.",
-    reference: "QS. At-Taubah: 120",
-    question:
-      "Siapa dalam hidup Anda yang paling ingin Anda bantu jika bisa?",
-  },
-  {
-    ayat: "وَمَا تُقَدِّمُوا لِأَنفُسِكُم مِّنْ خَيْرٍ تَجِدُوهُ عِندَ اللَّهِ",
-    translation:
-      "Dan kebaikan apa saja yang kamu kerjakan untuk dirimu, niscaya kamu akan mendapatkannya di sisi Allah.",
-    reference: "QS. Al-Baqarah: 110",
-    question:
-      "Apa yang Anda rasakan saat ini setelah berbagi dengan sesama?",
-  },
-  {
-    ayat: "مَن ذَا الَّذِي يُقْرِضُ اللَّهَ قَرْضًا حَسَنًا فَيُضَاعِفَهُ لَهُ أَضْعَافًا كَثِيرَةً",
-    translation:
-      "Siapakah yang mau memberi pinjaman kepada Allah, pinjaman yang baik, maka Allah akan melipat gandakan.",
-    reference: "QS. Al-Baqarah: 245",
-    question:
-      "Jika ada satu perubahan yang ingin Anda wujudkan lewat donasi, apa itu?",
-  },
-  {
-    ayat: "لَن تَنَالُوا الْبِرَّ حَتَّىٰ تُنفِقُوا مِمَّا تُحِبُّونَ",
-    translation:
-      "Kamu sekali-kali tidak sampai kepada kebajikan, sebelum kamu menafkahkan sebagian harta yang kamu cintai.",
-    reference: "QS. Ali Imran: 92",
-    question:
-      "Apa hal kecil yang bisa Anda lakukan besok untuk meneruskan kebaikan ini?",
-  },
-];
 
 /** Auto-close timer: 30 detik */
 const AUTO_CLOSE_MS = 30_000;

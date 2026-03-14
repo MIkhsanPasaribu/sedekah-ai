@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { speakText } from "@/hooks/useVoiceChat";
 import Image from "next/image";
 
 interface MessageBubbleProps {
@@ -19,6 +22,29 @@ export function MessageBubble({
   isLoading,
 }: MessageBubbleProps) {
   const isUser = role === "user";
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const stopSpeakRef = { current: () => undefined as void };
+
+  function handleSpeak() {
+    if (isSpeaking) {
+      stopSpeakRef.current();
+      setIsSpeaking(false);
+      return;
+    }
+    setIsSpeaking(true);
+    const stopFn = speakText(content);
+    stopSpeakRef.current = () => {
+      stopFn();
+      setIsSpeaking(false);
+    };
+    // Reset flag when speech ends naturally via window event
+    const checkEnd = setInterval(() => {
+      if (!window.speechSynthesis?.speaking) {
+        setIsSpeaking(false);
+        clearInterval(checkEnd);
+      }
+    }, 400);
+  }
 
   return (
     <div
@@ -61,6 +87,22 @@ export function MessageBubble({
                   minute: "2-digit",
                 })}
               </span>
+            )}
+            {!isUser && !isLoading && content && (
+              <button
+                onClick={handleSpeak}
+                title={isSpeaking ? "Hentikan" : "Dengarkan"}
+                className={cn(
+                  "opacity-0 group-hover:opacity-100 h-5 w-5 flex items-center justify-center rounded text-ink-light transition hover:text-brand-green-deep",
+                  isSpeaking && "opacity-100 text-brand-green-deep",
+                )}
+              >
+                {isSpeaking ? (
+                  <VolumeX className="h-3.5 w-3.5" />
+                ) : (
+                  <Volume2 className="h-3.5 w-3.5" />
+                )}
+              </button>
             )}
           </div>
 

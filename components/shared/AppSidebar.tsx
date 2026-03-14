@@ -42,10 +42,15 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const NAV_ITEMS = [
-  { href: "/chat", label: "Chat AI", icon: MessageSquare },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/campaigns", label: "Kampanye", icon: Heart },
-  { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
+  { href: "/chat", label: "Chat AI", icon: MessageSquare, id: "nav-chat" },
+  {
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    id: "nav-dashboard",
+  },
+  { href: "/campaigns", label: "Kampanye", icon: Heart, id: "nav-campaigns" },
+  { href: "/leaderboard", label: "Leaderboard", icon: Trophy, id: undefined },
 ];
 
 const ADMIN_NAV_ITEMS = [
@@ -160,7 +165,10 @@ export function AppSidebar({ userName, userEmail, userRole }: AppSidebarProps) {
                 const isActive = pathname.startsWith(item.href);
                 const Icon = item.icon;
                 return (
-                  <SidebarMenuItem key={item.href}>
+                  <SidebarMenuItem
+                    key={item.href}
+                    {...(item.id ? { id: item.id } : {})}
+                  >
                     <SidebarMenuButton
                       render={<Link href={item.href} />}
                       isActive={isActive}
