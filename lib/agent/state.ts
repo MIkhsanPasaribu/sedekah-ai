@@ -2,7 +2,6 @@
 // LangGraph Agent — State Schema (SedekahState)
 // ============================================================
 
-import { BaseMessage } from "@langchain/core/messages";
 import { Annotation, MessagesAnnotation } from "@langchain/langgraph";
 
 // ---------- Sub-types ----------
@@ -175,6 +174,12 @@ export const SedekahStateAnnotation = Annotation.Root({
 
   /** Nominal donasi custom (untuk sedekah/infaq tanpa kalkulasi zakat) */
   customAmount: Annotation<number | null>({
+    reducer: (_prev, next) => next,
+    default: () => null,
+  }),
+
+  /** Supervisor intent classification (donation/info/greeting) */
+  supervisorIntent: Annotation<"donation" | "info" | "greeting" | null>({
     reducer: (_prev, next) => next,
     default: () => null,
   }),
