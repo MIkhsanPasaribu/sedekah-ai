@@ -48,9 +48,9 @@ const FEATURES = [
   },
   {
     iconName: "Bot" as const,
-    name: "7 AI Agent Nodes",
+    name: "8 AI Agent Nodes",
     description:
-      "Dari intake niat hingga impact tracking — 7 node AI bekerja berurutan untuk pengalaman bersedekah terbaik.",
+      "Dari klasifikasi niat hingga impact tracking — 8 node AI bekerja berurutan untuk pengalaman bersedekah terbaik.",
     className: "lg:col-span-1",
     href: "/chat",
     cta: "Chat Sekarang",
@@ -247,7 +247,7 @@ export default function LandingPage() {
                 <div className="mx-auto mt-16 grid max-w-lg grid-cols-3 gap-8 border-t border-brand-green-mid/30 pt-8">
                   <div>
                     <p className="text-3xl font-heading font-bold text-brand-gold-core sm:text-4xl">
-                      <NumberTicker value={7} />
+                      <NumberTicker value={8} />
                     </p>
                     <p className="mt-1 text-sm text-brand-green-ghost/60">
                       AI Agent Nodes
@@ -566,10 +566,18 @@ export default function LandingPage() {
                 SEDEKAH<span className="text-brand-gold-core">.AI</span>
               </span>
             </div>
-            <p className="text-xs text-ink-mid">
-              &copy; 2026 SEDEKAH.AI — Dibuat dengan 💚 untuk umat. Mayar
-              Vibecoding Competition 2026.
-            </p>
+            <div className="flex flex-col items-center gap-2 sm:flex-row sm:gap-4">
+              <Link
+                href="/tim-pengembang"
+                className="text-xs font-medium text-brand-green-deep transition-colors hover:text-brand-gold-core"
+              >
+                Tim Pengembang
+              </Link>
+              <p className="text-xs text-ink-mid">
+                &copy; 2026 SEDEKAH.AI — Dibuat dengan 💚 untuk umat. Mayar
+                Vibecoding Competition 2026.
+              </p>
+            </div>
           </div>
         </div>
       </footer>
