@@ -3,10 +3,23 @@
 // ============================================================
 // Handles payment.completed event from Mayar
 
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { incrementCampaignCollected } from "@/lib/db/campaign-helpers";
 import type { MayarWebhookEvent } from "@/lib/mayar/types";
+
+// Zod schema for Mayar webhook payload
+const webhookPayloadSchema = z.object({
+  event: z.string().min(1),
+  data: z.object({
+    id: z.string().min(1),
+    amount: z.number().optional(),
+    customerEmail: z.string().email().optional(),
+    paidAt: z.string().optional(),
+  }),
+});
 
 export const runtime = "nodejs";
 
@@ -23,20 +36,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
     const receivedToken = req.headers.get("x-callback-token");
-    if (receivedToken !== expectedToken) {
+    if (
+      !receivedToken ||
+      !crypto.timingSafeEqual(
+        Buffer.from(receivedToken),
+        Buffer.from(expectedToken),
+      )
+    ) {
       console.warn("[Mayar Webhook] Invalid callback token");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await req.json()) as MayarWebhookEvent;
-
-    // Validate webhook event
-    if (!body.event || !body.data) {
+    // Validate webhook payload with Zod
+    const rawBody = await req.json();
+    const parsed = webhookPayloadSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      console.warn("[Mayar Webhook] Invalid payload:", parsed.error.issues);
       return NextResponse.json(
         { error: "Invalid webhook payload" },
         { status: 400 },
       );
     }
+    const body = parsed.data as MayarWebhookEvent;
 
     console.log(`[Mayar Webhook] Event: ${body.event}, ID: ${body.data.id}`);
 

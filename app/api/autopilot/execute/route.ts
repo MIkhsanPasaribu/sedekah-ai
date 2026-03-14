@@ -38,10 +38,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     for (const config of configs) {
       try {
-        // Pick top campaign matching user's categories
-        const campaign = await prisma.campaign.findFirst({
+        // Pick top 3 trusted campaigns matching user's categories
+        const topCampaigns = await prisma.campaign.findMany({
           where: {
             isActive: true,
+            trustScore: { gte: 55 },
             category: {
               in: config.categories as (
                 | "yatim"
@@ -53,7 +54,39 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             },
           },
           orderBy: { trustScore: "desc" },
+          take: 3,
         });
+
+        // Fallback: any active campaign if no category match
+        const usableCampaigns =
+          topCampaigns.length > 0
+            ? topCampaigns
+            : await prisma.campaign.findMany({
+                where: { isActive: true, trustScore: { gte: 55 } },
+                orderBy: { trustScore: "desc" },
+                take: 3,
+              });
+
+        // Weighted allocation by trust score
+        const totalScore = usableCampaigns.reduce(
+          (sum, c) => sum + c.trustScore,
+          0,
+        );
+        const allocations = usableCampaigns.map((c) => ({
+          campaign: c,
+          amount: Math.round(
+            (config.monthlyAmount * c.trustScore) / Math.max(totalScore, 1),
+          ),
+        }));
+
+        // Correct rounding so sum exactly equals monthlyAmount
+        const allocatedTotal = allocations.reduce(
+          (sum, a) => sum + a.amount,
+          0,
+        );
+        if (allocations.length > 0 && allocatedTotal !== config.monthlyAmount) {
+          allocations[0].amount += config.monthlyAmount - allocatedTotal;
+        }
 
         const monthLabel = new Date().toLocaleDateString("id-ID", {
           month: "long",
@@ -67,19 +100,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           description: `Donasi otomatis bulanan — ${monthLabel}`,
         });
 
-        // Record donation
-        await prisma.donation.create({
-          data: {
-            userId: config.user.id,
-            amount: config.monthlyAmount,
-            type: "sedekah",
-            donorIntent: "Donasi otomatis bulanan via Autopilot",
-            campaignId: campaign?.id ?? null,
-            mayarInvoiceId: invoiceRes.data?.id ?? null,
-            mayarPaymentLink: invoiceRes.data?.link ?? null,
-            status: "pending",
-          },
-        });
+        // Create one Donation record per campaign allocation (shared invoice)
+        for (const alloc of allocations) {
+          await prisma.donation.create({
+            data: {
+              userId: config.user.id,
+              amount: alloc.amount,
+              type: "sedekah",
+              donorIntent: `Donasi otomatis bulanan via Autopilot — ${alloc.campaign.name}`,
+              campaignId: alloc.campaign.id,
+              mayarInvoiceId: invoiceRes.data?.id ?? null,
+              mayarPaymentLink: invoiceRes.data?.link ?? null,
+              status: "pending",
+            },
+          });
+        }
 
         // Advance nextRunAt by 1 month
         const nextRun = new Date(config.nextRunAt!);

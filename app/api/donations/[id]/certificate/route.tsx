@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { ImageResponse } from "next/og";
+import { ChatGroq } from "@langchain/groq";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 
@@ -74,6 +75,32 @@ export async function GET(
   const typeLabel = donation.type
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // AI-personalized doa — fallback to QS 2:261 if Groq unavailable
+  let islamicDoa =
+    '"Perumpamaan orang yang menginfakkan hartanya di jalan Allah seperti sebutir biji yang menumbuhkan tujuh tangkai, pada setiap tangkai ada seratus biji." — QS 2:261';
+  try {
+    const llm = new ChatGroq({
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.7,
+      apiKey: process.env.GROQ_API_KEY,
+    });
+    const res = await llm.invoke([
+      {
+        role: "system",
+        content:
+          "Kamu adalah cendekiawan Islam. Berikan SATU ayat Al-Qur'an atau hadits dalam Bahasa Indonesia (terjemahkan) yang relevan dengan donasi ini. Format: tanda kutip isi, diakhiri tanda — dan referensi singkat. Maksimal 2 kalimat. Jangan ada kata lain.",
+      },
+      {
+        role: "user",
+        content: `Donatur: ${donorName}, jenis: ${typeLabel}, kampanye: ${campaignName}, nominal: ${amount}`,
+      },
+    ]);
+    const text = String(res.content).trim();
+    if (text.length > 10 && text.length < 300) islamicDoa = text;
+  } catch {
+    // Fallback to hardcoded doa
+  }
 
   return new ImageResponse(
     <div
@@ -216,7 +243,7 @@ export async function GET(
         {date}
       </div>
 
-      {/* QS 2:261 */}
+      {/* Doa / Ayat (AI-personalized) */}
       <div
         style={{
           color: "#C9A227",
@@ -226,9 +253,7 @@ export async function GET(
           maxWidth: "700px",
         }}
       >
-        &quot;Perumpamaan orang yang menginfakkan hartanya di jalan Allah
-        seperti sebutir biji yang menumbuhkan tujuh tangkai, pada setiap tangkai
-        ada seratus biji.&quot; — QS 2:261
+        {islamicDoa}
       </div>
 
       {/* Bottom accent */}
