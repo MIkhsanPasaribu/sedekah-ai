@@ -11,6 +11,7 @@ import { createMayarInvoiceTool } from "../tools/mayar.tool";
 import { createCustomer } from "@/lib/mayar/customer";
 import { prisma } from "@/lib/prisma";
 import { formatRupiah } from "@/lib/utils";
+import { validateRecommendationRuntime } from "@/lib/validations/recommendation";
 import { z } from "zod";
 
 const createInvoiceResultSchema = z.object({
@@ -20,10 +21,33 @@ const createInvoiceResultSchema = z.object({
   error: z.string().optional(),
 });
 
+function mapPaymentErrorMessage(rawError?: string): string {
+  const normalized = (rawError ?? "").toLowerCase();
+
+  if (normalized.includes("amount") || normalized.includes("nominal")) {
+    return "Nominal pembayaran terdeteksi tidak valid untuk invoice. Silakan ubah alokasi atau nominal donasi, lalu coba lagi.";
+  }
+
+  if (normalized.includes("email") || normalized.includes("customer")) {
+    return "Data kontak donatur belum valid untuk pembuatan invoice. Mohon periksa email akun Anda, lalu ulangi proses pembayaran.";
+  }
+
+  if (
+    normalized.includes("timeout") ||
+    normalized.includes("timed out") ||
+    normalized.includes("gateway")
+  ) {
+    return "Jaringan pembayaran sedang sibuk. Silakan tunggu beberapa saat lalu tekan Bayar Sekarang kembali.";
+  }
+
+  return "Mohon maaf, terjadi kendala saat memproses pembayaran. Silakan coba beberapa saat lagi.";
+}
+
 export async function paymentExecutorNode(
   state: SedekahState,
 ): Promise<Partial<SedekahState>> {
-  const { recommendation, donorName, donorEmail } = state;
+  const { donorName, donorEmail } = state;
+  const recommendation = validateRecommendationRuntime(state.recommendation);
 
   if (!recommendation || recommendation.allocations.length === 0) {
     return {
@@ -47,6 +71,37 @@ export async function paymentExecutorNode(
         ),
       ],
       recommendation: null,
+    };
+  }
+
+  const hasInvalidAllocation = recommendation.allocations.some(
+    (allocation) => allocation.amount <= 0,
+  );
+  if (hasInvalidAllocation) {
+    return {
+      messages: [
+        buildAgentMessage(
+          "Alokasi donasi tidak valid. Mohon perbarui alokasi terlebih dahulu sebelum melanjutkan pembayaran.",
+          "PAYMENT_EXECUTOR",
+        ),
+      ],
+      paymentStatus: "failed",
+    };
+  }
+
+  const allocationTotal = recommendation.allocations.reduce(
+    (sum, allocation) => sum + allocation.amount,
+    0,
+  );
+  if (Math.abs(allocationTotal - totalAmount) > 1) {
+    return {
+      messages: [
+        buildAgentMessage(
+          "Total alokasi belum sinkron dengan total pembayaran. Silakan ubah alokasi sekali lagi agar nominalnya konsisten.",
+          "PAYMENT_EXECUTOR",
+        ),
+      ],
+      paymentStatus: "failed",
     };
   }
 
@@ -98,10 +153,12 @@ export async function paymentExecutorNode(
       "[PAYMENT_EXECUTOR] Invoice creation failed:",
       parsed?.error ?? "Invalid invoice tool response",
     );
+    const guidance = mapPaymentErrorMessage(parsed?.error);
+
     return {
       messages: [
         buildAgentMessage(
-          `Mohon maaf, terjadi kendala saat memproses pembayaran. Silakan coba beberapa saat lagi. 🤲\n\n_Kami sedang memperbaiki masalah ini._`,
+          `${guidance} 🤲\n\nJika masih berlanjut, Anda dapat pilih Ubah Alokasi terlebih dahulu lalu coba lagi.`,
           "PAYMENT_EXECUTOR",
         ),
       ],

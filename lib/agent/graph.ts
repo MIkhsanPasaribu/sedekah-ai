@@ -42,6 +42,7 @@ import { calculateNode } from "./nodes/calculate";
 import { researchNode } from "./nodes/research";
 import { fraudDetectorNode } from "./nodes/fraud";
 import { recommendNode } from "./nodes/recommend";
+import { recommendEditNode } from "./nodes/recommend-edit";
 import { paymentExecutorNode } from "./nodes/payment";
 import { impactTrackerNode } from "./nodes/impact";
 import { supervisorNode } from "./nodes/supervisor";
@@ -53,6 +54,10 @@ import { supervisorNode } from "./nodes/supervisor";
  * Otherwise, loop back to handle more user input.
  */
 function routeAfterIntake(state: SedekahState): string {
+  if (state.editMode && state.previousRecommendation) {
+    return "RECOMMEND_EDIT";
+  }
+
   if (state.userFinancialData) {
     return "CALCULATE";
   }
@@ -64,6 +69,14 @@ function routeAfterIntake(state: SedekahState): string {
     return "CALCULATE";
   }
   return END; // Wait for more user input
+}
+
+function routeAfterSupervisor(state: SedekahState): string {
+  if (state.editMode && state.previousRecommendation) {
+    return "RECOMMEND_EDIT";
+  }
+
+  return "INTAKE";
 }
 
 /**
@@ -99,12 +112,25 @@ function paymentApprovalNode(state: SedekahState): Partial<SedekahState> {
           name: "PAYMENT_APPROVAL",
         }),
       ],
+      editMode: true,
+      previousRecommendation: state.recommendation,
+      allocationEditTarget: null,
+      awaitingAmountOverwriteConfirmation: false,
+      proposedTotalAmount: null,
+      awaitingSingleCampaignSelection: false,
       recommendation: null,
     };
   }
 
   // "approve" — proceed to PAYMENT_EXECUTOR
-  return {};
+  return {
+    editMode: false,
+    previousRecommendation: null,
+    allocationEditTarget: null,
+    awaitingAmountOverwriteConfirmation: false,
+    proposedTotalAmount: null,
+    awaitingSingleCampaignSelection: false,
+  };
 }
 
 /**
@@ -141,6 +167,8 @@ const NODE_FALLBACK_MESSAGES: Record<string, string> = {
     "Analisis keamanan kampanye sedang tidak tersedia. Saya tetap menampilkan rekomendasi. 🤲",
   RECOMMEND:
     "Mohon maaf, terjadi kendala saat menyusun rekomendasi. Silakan coba lagi. 🤲",
+  RECOMMEND_EDIT:
+    "Mohon maaf, perubahan alokasi belum bisa diproses. Silakan pilih ulang kampanye tujuan Anda. 🤲",
   PAYMENT_EXECUTOR:
     "Mohon maaf, terjadi kendala saat memproses pembayaran. Silakan coba beberapa saat lagi. 🤲",
   IMPACT_TRACKER:
@@ -166,8 +194,7 @@ function withResilience<S extends { messages?: unknown[] }, R>(
       return result;
     } catch (error) {
       const ms = Math.round(performance.now() - start);
-      const errorMsg =
-        error instanceof Error ? error.message : "Unknown error";
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
       console.error(
         `[Node] ${name}: FAILED after ${ms}ms — ${errorMsg}`,
         error,
@@ -199,25 +226,43 @@ export function buildSedekahGraph(checkpointer: MemorySaver) {
     .addNode("INTAKE", withResilience("INTAKE", intakeNode))
     .addNode("CALCULATE", withResilience("CALCULATE", calculateNode))
     .addNode("RESEARCH", withResilience("RESEARCH", researchNode))
-    .addNode("FRAUD_DETECTOR", withResilience("FRAUD_DETECTOR", fraudDetectorNode))
+    .addNode(
+      "FRAUD_DETECTOR",
+      withResilience("FRAUD_DETECTOR", fraudDetectorNode),
+    )
     .addNode("RECOMMEND", withResilience("RECOMMEND", recommendNode))
+    .addNode(
+      "RECOMMEND_EDIT",
+      withResilience("RECOMMEND_EDIT", recommendEditNode),
+    )
     .addNode("PAYMENT_APPROVAL", paymentApprovalNode)
     .addNode(
       "PAYMENT_EXECUTOR",
       withResilience("PAYMENT_EXECUTOR", paymentExecutorNode),
     )
-    .addNode("IMPACT_TRACKER", withResilience("IMPACT_TRACKER", impactTrackerNode))
+    .addNode(
+      "IMPACT_TRACKER",
+      withResilience("IMPACT_TRACKER", impactTrackerNode),
+    )
 
     // Add edges — SUPERVISOR routes based on intent
     .addEdge(START, "SUPERVISOR")
-    .addEdge("SUPERVISOR", "INTAKE")
+    .addConditionalEdges("SUPERVISOR", routeAfterSupervisor, {
+      RECOMMEND_EDIT: "RECOMMEND_EDIT",
+      INTAKE: "INTAKE",
+    })
     .addConditionalEdges("INTAKE", routeAfterIntake, {
       CALCULATE: "CALCULATE",
+      RECOMMEND_EDIT: "RECOMMEND_EDIT",
       [END]: END,
     })
     .addEdge("CALCULATE", "RESEARCH")
     .addEdge("RESEARCH", "FRAUD_DETECTOR")
     .addEdge("FRAUD_DETECTOR", "RECOMMEND")
+    .addConditionalEdges("RECOMMEND_EDIT", routeAfterRecommend, {
+      PAYMENT_APPROVAL: "PAYMENT_APPROVAL",
+      [END]: END,
+    })
     .addConditionalEdges("RECOMMEND", routeAfterRecommend, {
       PAYMENT_APPROVAL: "PAYMENT_APPROVAL",
       [END]: END,

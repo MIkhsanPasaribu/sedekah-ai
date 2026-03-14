@@ -11,6 +11,7 @@ import { PostPaymentReflection } from "./PostPaymentReflection";
 import { MuhasabahModal } from "@/components/shared/MuhasabahModal";
 import { IslamicLoadingSpinner } from "@/components/shared/IslamicLoadingSpinner";
 import { AgentProgressBar } from "./AgentProgressBar";
+import { validateRecommendationRuntime } from "@/lib/validations/recommendation";
 import type {
   Recommendation,
   ImpactReport,
@@ -239,7 +240,7 @@ export function ChatInterface({
             id: `timeout-${Date.now()}`,
             role: "assistant",
             content:
-              "⏰ Pembayaran belum terdeteksi dalam 10 menit. Silakan cek email Anda atau klik link pembayaran kembali. Jika sudah membayar, refresh halaman ini.",
+              "⏰ Pembayaran belum terdeteksi dalam 10 menit.\n\nLangkah berikutnya:\n1. Jika sudah membayar, refresh halaman ini.\n2. Jika belum, klik ulang link pembayaran.\n3. Jika transaksi terpotong tapi status belum berubah, tunggu 2-3 menit lalu cek lagi.",
             timestamp: new Date(),
           },
         ]);
@@ -481,22 +482,39 @@ export function ChatInterface({
   }
 
   function handleApprovePayment(): void {
+    const recommendation = validateRecommendationRuntime(
+      agentState.recommendation,
+    );
+    if (isLoading || !recommendation) {
+      return;
+    }
+
     // Resume graph dari interrupt() dengan aksi "approve"
     void sendMessage("Bayar sekarang", { action: "approve" });
   }
 
   function handleEditAllocation(): void {
+    const recommendation = validateRecommendationRuntime(
+      agentState.recommendation,
+    );
+    if (isLoading || !recommendation) {
+      return;
+    }
+
     // Resume graph dari interrupt() dengan aksi "edit"
     void sendMessage("Ubah alokasi", { action: "edit" });
   }
 
   const showQuickActions = messages.length === 0 && !isLoadingHistory;
+  const validatedRecommendation = validateRecommendationRuntime(
+    agentState.recommendation,
+  );
   const showZakatBreakdown =
     agentState.zakatBreakdown !== null &&
     agentState.zakatBreakdown.totalKewajiban > 0;
   const showPaymentApproval =
-    agentState.recommendation &&
-    agentState.recommendation.totalAmount > 0 &&
+    validatedRecommendation &&
+    validatedRecommendation.totalAmount > 0 &&
     !agentState.mayarInvoiceLink &&
     agentState.paymentStatus !== "paid";
   // Show Islamic spinner only during the payment approval-to-invoice step
@@ -568,10 +586,10 @@ export function ChatInterface({
         )}
 
         {/* Payment Approval Card */}
-        {showPaymentApproval && agentState.recommendation && (
+        {showPaymentApproval && validatedRecommendation && (
           <div className="mx-auto max-w-3xl px-4 py-2">
             <PaymentApprovalCard
-              recommendation={agentState.recommendation}
+              recommendation={validatedRecommendation}
               onApprove={handleApprovePayment}
               onEdit={handleEditAllocation}
               isLoading={isLoading}
@@ -617,12 +635,12 @@ export function ChatInterface({
         )}
 
         {/* Post-Payment Spiritual Reflection */}
-        {showPostPaymentReflection && agentState.recommendation && (
+        {showPostPaymentReflection && validatedRecommendation && (
           <div className="mx-auto max-w-3xl px-4 py-2">
             <PostPaymentReflection
-              amount={agentState.recommendation.totalAmount}
+              amount={validatedRecommendation.totalAmount}
               donorIntent={agentState.donorIntent}
-              islamicContext={agentState.recommendation.islamicContext}
+              islamicContext={validatedRecommendation.islamicContext}
             />
           </div>
         )}

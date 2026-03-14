@@ -72,6 +72,13 @@ export interface Recommendation {
   islamicContext: string;
 }
 
+export interface AllocationEditTarget {
+  campaignId: string | null;
+  campaignName: string | null;
+  selectionIndex: number | null;
+  percentage: number | null;
+}
+
 export interface ImpactItem {
   category: string;
   amount: number;
@@ -176,6 +183,42 @@ export const SedekahStateAnnotation = Annotation.Root({
   customAmount: Annotation<number | null>({
     reducer: (_prev, next) => next,
     default: () => null,
+  }),
+
+  /** Menandai chat saat ini sedang berada di mode ubah alokasi */
+  editMode: Annotation<boolean>({
+    reducer: (_prev, next) => next,
+    default: () => false,
+  }),
+
+  /** Snapshot rekomendasi sebelum user menekan tombol ubah alokasi */
+  previousRecommendation: Annotation<Recommendation | null>({
+    reducer: (_prev, next) => next,
+    default: () => null,
+  }),
+
+  /** Menyimpan hasil parse target kampanye user selama mode edit */
+  allocationEditTarget: Annotation<AllocationEditTarget | null>({
+    reducer: (_prev, next) => next,
+    default: () => null,
+  }),
+
+  /** Menandai apakah sistem sedang menunggu konfirmasi overwrite nominal baru */
+  awaitingAmountOverwriteConfirmation: Annotation<boolean>({
+    reducer: (_prev, next) => next,
+    default: () => false,
+  }),
+
+  /** Menyimpan nominal usulan baru sampai user mengonfirmasi overwrite */
+  proposedTotalAmount: Annotation<number | null>({
+    reducer: (_prev, next) => next,
+    default: () => null,
+  }),
+
+  /** Menandai request "satu kampanye saja" ketika target belum disebutkan */
+  awaitingSingleCampaignSelection: Annotation<boolean>({
+    reducer: (_prev, next) => next,
+    default: () => false,
   }),
 
   /** Supervisor intent classification (donation/info/greeting) */

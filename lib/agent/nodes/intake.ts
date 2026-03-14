@@ -20,6 +20,10 @@ import { invokeWithRetryAndTimeout } from "@/lib/agent/utils";
 import { z } from "zod";
 import type { SedekahState } from "../state";
 import { getAiRuntimeConfig } from "@/lib/env";
+import {
+  hasExplicitAmountSignal,
+  parseDonationAmount,
+} from "@/lib/agent/parsers/donation";
 
 function detectDonationIntent(text: string): SedekahState["donorIntent"] {
   const normalized = text.toLowerCase();
@@ -33,29 +37,6 @@ function detectDonationIntent(text: string): SedekahState["donorIntent"] {
   if (/(sedekah|sedeqah|donasi|amal)/i.test(normalized)) return "sedekah";
 
   return null;
-}
-
-function parseDonationAmount(text: string): number | null {
-  const normalized = text
-    .toLowerCase()
-    .replace(/rp\.?/g, "")
-    .replace(/\./g, "")
-    .replace(/,/g, ".")
-    .trim();
-
-  // Match patterns like: 100 ribu, 1.5 juta, 250000, 100k
-  const match = normalized.match(/(\d+(?:\.\d+)?)\s*(juta|jt|ribu|rb|k)?/i);
-  if (!match) return null;
-
-  const base = Number(match[1]);
-  if (!Number.isFinite(base) || base <= 0) return null;
-
-  const unit = (match[2] ?? "").toLowerCase();
-  if (unit === "juta" || unit === "jt") return Math.round(base * 1_000_000);
-  if (unit === "ribu" || unit === "rb" || unit === "k")
-    return Math.round(base * 1_000);
-
-  return Math.round(base);
 }
 
 // ── LLM instances ────────────────────────────────────────────
@@ -198,17 +179,17 @@ export async function intakeNode(
   state: SedekahState,
 ): Promise<Partial<SedekahState>> {
   const messages = state.messages;
+  const humanContents = messages
+    .filter((m) => (m as { _getType?: () => string })._getType?.() === "human")
+    .map((m) => (typeof m.content === "string" ? m.content : ""))
+    .filter((content) => content.trim().length > 0);
+  const latestHumanText = humanContents.at(-1) ?? "";
+  const humanConversationText = humanContents.join("\n");
 
-  // Build messages list for extraction — use only the conversation content
+  // Build extraction context from user messages only to avoid model self-contamination.
   const extractionMessages = [
     new SystemMessage(EXTRACTION_SYSTEM_PROMPT),
-    ...messages.map((m) => {
-      const content = typeof m.content === "string" ? m.content : "";
-      const msgType = (m as { _getType?: () => string })._getType?.();
-      return msgType === "ai"
-        ? new AIMessage(content)
-        : new HumanMessage(content);
-    }),
+    ...humanContents.map((content) => new HumanMessage(content)),
   ];
 
   // Run both LLM calls in parallel for efficiency
@@ -248,9 +229,6 @@ export async function intakeNode(
   let donorIntent = state.donorIntent;
   let userFinancialData = state.userFinancialData;
   let customAmount = state.customAmount;
-  const conversationText = messages
-    .map((m) => (typeof m.content === "string" ? m.content : ""))
-    .join("\n");
 
   if (extracted) {
     if (extracted.donorIntent) donorIntent = extracted.donorIntent;
@@ -272,11 +250,26 @@ export async function intakeNode(
 
   // Deterministic fallbacks when structured extraction misses after model variance.
   if (!donorIntent) {
-    donorIntent = detectDonationIntent(conversationText);
+    donorIntent =
+      detectDonationIntent(latestHumanText) ??
+      detectDonationIntent(humanConversationText);
   }
 
   if (!customAmount) {
-    customAmount = parseDonationAmount(conversationText);
+    customAmount =
+      parseDonationAmount(latestHumanText) ??
+      parseDonationAmount(humanConversationText);
+  }
+
+  const deterministicAmount =
+    parseDonationAmount(latestHumanText) ??
+    parseDonationAmount(humanConversationText);
+  if (
+    deterministicAmount &&
+    hasExplicitAmountSignal(latestHumanText || humanConversationText) &&
+    (!customAmount || Math.abs(customAmount - deterministicAmount) >= 1_000)
+  ) {
+    customAmount = deterministicAmount;
   }
 
   if (
