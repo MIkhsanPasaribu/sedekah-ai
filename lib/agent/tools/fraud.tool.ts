@@ -4,6 +4,8 @@
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { ChatGroq } from "@langchain/groq";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { FraudScore } from "../state";
 
 const analyzeFraudSchema = z.object({
@@ -25,6 +27,26 @@ const analyzeFraudSchema = z.object({
     )
     .describe("Daftar kampanye yang akan dianalisis"),
 });
+
+const narrativeAnalysisLlm = new ChatGroq({
+  model: "llama-3.3-70b-versatile",
+  temperature: 0,
+  apiKey: process.env.GROQ_API_KEY,
+}).withStructuredOutput(
+  z.object({
+    manipulationScore: z
+      .number()
+      .min(0)
+      .max(100)
+      .describe(
+        "Skor manipulasi 0-100: 0=tidak ada manipulasi (terpercaya), 100=sangat manipulatif",
+      ),
+    detectedTechniques: z
+      .array(z.string())
+      .describe("Teknik manipulasi yang terdeteksi"),
+    explanation: z.string().describe("Penjelasan singkat analisis narasi"),
+  }),
+);
 
 /**
  * Tool untuk menganalisis trust score kampanye.
@@ -76,7 +98,7 @@ export const analyzeFraudTool = tool(
         }
       }
 
-      // Narrative Score: simpified heuristic (in production, use LLM NLP)
+      // Narrative Score: Hybrid rule-based (40%) + LLM NLP analysis (60%)
       const narrativeRedFlags = [
         "darurat",
         "segera",
@@ -90,7 +112,27 @@ export const analyzeFraudTool = tool(
       const narrativeFlags = narrativeRedFlags.filter((flag) =>
         descLower.includes(flag),
       ).length;
-      const narrativeScore = Math.max(20, 90 - narrativeFlags * 15);
+      const ruleBasedNarrativeScore = Math.max(20, 90 - narrativeFlags * 15);
+
+      // LLM-based narrative analysis (temp=0 for determinism, fallback to rule-based)
+      const llmNarrativeResult = await narrativeAnalysisLlm
+        .invoke([
+          new SystemMessage(
+            "Anda adalah analis penipuan donasi online. Analisis apakah teks kampanye menggunakan teknik manipulasi psikologis seperti FOMO, urgensi palsu, atau klaim berlebihan. Berikan skor manipulasi 0-100 di mana 0=tidak ada manipulasi (terpercaya) dan 100=sangat manipulatif (berisiko tinggi).",
+          ),
+          new HumanMessage(
+            `Nama kampanye: ${campaign.name}\n\nDeskripsi: ${campaign.description}`,
+          ),
+        ])
+        .catch(() => null);
+
+      // Hybrid: 40% rule-based + 60% LLM (manipulationScore inverted to trust scale)
+      const llmTrustScore = llmNarrativeResult
+        ? 100 - llmNarrativeResult.manipulationScore
+        : ruleBasedNarrativeScore;
+      const narrativeScore = Math.round(
+        0.4 * ruleBasedNarrativeScore + 0.6 * llmTrustScore,
+      );
 
       // Overall weighted score
       const overallScore = Math.round(
