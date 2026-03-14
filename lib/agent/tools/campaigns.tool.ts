@@ -5,6 +5,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { campaignCache } from "@/lib/cache";
 
 const searchCampaignsSchema = z.object({
   category: z
@@ -32,12 +33,27 @@ const searchCampaignsSchema = z.object({
  * Tool untuk mencari kampanye aktif dari database.
  * Digunakan oleh Node 3: RESEARCH.
  * Filter berdasarkan niat donatur, trust score, dan region.
+ * Results are cached with 5-minute TTL to avoid redundant DB queries.
  */
 export const searchCampaignsTool = tool(
   async (input): Promise<string> => {
     try {
       const minScore = input.minTrustScore ?? 55;
       const maxResults = input.limit ?? 10;
+
+      // Build cache key from query parameters
+      const cacheKey = `campaigns:${input.category ?? "all"}:${minScore}:${input.region ?? "all"}:${maxResults}`;
+
+      // Check TTL cache first
+      const cached = campaignCache.get(cacheKey);
+      if (cached) {
+        return JSON.stringify({
+          success: true,
+          count: cached.length,
+          campaigns: cached,
+          fromCache: true,
+        });
+      }
 
       const campaigns = await prisma.campaign.findMany({
         where: {
@@ -80,6 +96,9 @@ export const searchCampaignsTool = tool(
         fraudFlags: c.fraudAlerts,
         endsAt: c.endsAt?.toISOString() ?? null,
       }));
+
+      // Store in cache for subsequent requests
+      campaignCache.set(cacheKey, result);
 
       return JSON.stringify({
         success: true,
