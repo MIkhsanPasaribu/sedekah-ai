@@ -10,8 +10,27 @@ import type {
   MayarCredit,
 } from "./types";
 
+export interface MayarCreditBalance {
+  customerId: string;
+  balance: number;
+}
+
 /**
- * Top-up kredit customer (Post-MVP).
+ * Get customer credit balance.
+ * GET /creditbasedproduct/balance?customerId={customerId}
+ */
+export async function getCustomerCreditBalance(
+  customerId: string,
+): Promise<MayarApiResponse<MayarCreditBalance>> {
+  return mayarFetch<MayarApiResponse<MayarCreditBalance>>({
+    method: "GET",
+    path: "/creditbasedproduct/balance",
+    params: { customerId },
+  });
+}
+
+/**
+ * Top-up kredit customer.
  * POST /creditbasedproduct/addcustomercredit
  */
 export async function addCustomerCredit(
@@ -25,7 +44,7 @@ export async function addCustomerCredit(
 }
 
 /**
- * Spend kredit customer (Post-MVP).
+ * Spend kredit customer.
  * POST /creditbasedproduct/spendcustomercredit
  */
 export async function spendCustomerCredit(
