@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { formatRupiah } from "@/lib/utils";
 import {
   invokeWithRetryAndTimeout,
-  sanitizeModelOutput,
+  sanitizeCardNarrativeOutput,
 } from "@/lib/agent/utils";
 import { getAiRuntimeConfig } from "@/lib/env";
 
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         {
           role: "system",
           content:
-            "Kamu adalah pencerita islami. Tulis cerita singkat (3-4 paragraf) dalam Bahasa Indonesia yang menggambarkan dampak nyata dari donasi ini. Ceritakan perjalanan dari niat donatur hingga manfaat yang dirasakan penerima. Gunakan bahasa yang menyentuh, penuh syukur, dan dibuka dengan Alhamdulillah.",
+            "Kamu adalah pencerita islami. Tulis cerita singkat (3-4 paragraf) dalam Bahasa Indonesia yang menggambarkan dampak nyata dari donasi ini. Ceritakan perjalanan dari niat donatur hingga manfaat yang dirasakan penerima. Gunakan bahasa yang menyentuh, penuh syukur, dan dibuka dengan Alhamdulillah. Jangan gunakan markdown (**, #, bullet), jangan tampilkan <think>, dan jangan tampilkan catatan internal.",
         },
         {
           role: "user",
@@ -95,7 +95,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const narrativeRaw = narrativeResponse
     ? String(narrativeResponse.content)
     : fallbackNarrative;
-  const narrative = sanitizeModelOutput(narrativeRaw).trim();
+  const narrative = sanitizeCardNarrativeOutput(narrativeRaw).trim();
+
+  if (!narrative) {
+    return NextResponse.json({
+      narrative: sanitizeCardNarrativeOutput(fallbackNarrative),
+    });
+  }
 
   return NextResponse.json({ narrative });
 }

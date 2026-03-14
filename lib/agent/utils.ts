@@ -169,6 +169,25 @@ export function sanitizeModelOutput(content: string): string {
   return enforceUserFacingOutputPolicy(content);
 }
 
+export function sanitizeCardNarrativeOutput(content: string): string {
+  if (!content) return "";
+
+  const cleaned = sanitizeModelOutput(content)
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/_(.*?)_/g, "$1")
+    .replace(/^\s*[>#]+\s?/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return cleaned;
+}
+
 export interface StreamTokenSanitizerResult {
   cleaned: string;
   droppedChars: number;
