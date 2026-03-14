@@ -11,7 +11,11 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimitPersistent } from "@/lib/rate-limiter";
 import { inferUserName } from "@/lib/auth/infer-user-name";
 import type { Prisma } from "@/generated/prisma/client";
-import { sanitizeModelOutput } from "@/lib/agent/utils";
+import {
+  createStreamTokenSanitizer,
+  extractTextFromChatStreamChunk,
+  sanitizeModelOutput,
+} from "@/lib/agent/utils";
 import { getAiRuntimeConfig } from "@/lib/env";
 import { recordAgentStreamMetric } from "@/lib/agent/observability";
 
@@ -353,12 +357,16 @@ export async function POST(req: NextRequest): Promise<Response> {
           nodeDurationsMs: {} as Record<string, number>,
           sendFailureCount: 0,
           responseFallbackUsed: false,
+          tokenEvents: 0,
+          tokenCharsSent: 0,
+          tokenDroppedByPolicy: 0,
         };
         let streamResult: "completed" | "errored" | "client_disconnected" =
           "completed";
         let needsApprovalValue: boolean | null = null;
         let currentNode = "";
         let currentNodeStartedAtMs = Date.now();
+        const sanitizeStreamToken = createStreamTokenSanitizer();
 
         logAgentEvent("info", "agent.stream.started", correlationId, {
           threadId: resolvedThreadId,
@@ -447,8 +455,30 @@ export async function POST(req: NextRequest): Promise<Response> {
 
             // Token-level streaming: emit each LLM token chunk
             if (eventKind === "on_chat_model_stream" && event.data?.chunk) {
-              // Intentionally suppress raw token streaming to avoid exposing
-              // model reasoning traces like <think> blocks in the UI.
+              if (!aiRuntime.enableTokenStream) {
+                continue;
+              }
+
+              const rawToken = extractTextFromChatStreamChunk(event.data.chunk);
+              if (!rawToken) {
+                continue;
+              }
+
+              const sanitizedToken = sanitizeStreamToken(rawToken);
+              metrics.tokenDroppedByPolicy += sanitizedToken.droppedChars;
+
+              if (!sanitizedToken.cleaned) {
+                continue;
+              }
+
+              metrics.tokenEvents += 1;
+              metrics.tokenCharsSent += sanitizedToken.cleaned.length;
+
+              if (!send("token", { content: sanitizedToken.cleaned })) {
+                streamResult = "client_disconnected";
+                break;
+              }
+
               continue;
             }
           }

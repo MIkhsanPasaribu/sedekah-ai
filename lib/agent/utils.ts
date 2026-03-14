@@ -169,6 +169,94 @@ export function sanitizeModelOutput(content: string): string {
   return enforceUserFacingOutputPolicy(content);
 }
 
+export interface StreamTokenSanitizerResult {
+  cleaned: string;
+  droppedChars: number;
+}
+
+export function createStreamTokenSanitizer(): (
+  token: string,
+) => StreamTokenSanitizerResult {
+  let rawBuffer = "";
+  let previousSanitized = "";
+
+  function sanitizeStreamingBuffer(content: string): string {
+    return content
+      .replace(/<think>[\s\S]*?<\/think>/gi, "")
+      .replace(/<think>[\s\S]*$/gi, "")
+      .replace(/<\/?think>/gi, "");
+  }
+
+  function longestCommonPrefixLength(a: string, b: string): number {
+    const max = Math.min(a.length, b.length);
+    let i = 0;
+    while (i < max && a[i] === b[i]) {
+      i += 1;
+    }
+    return i;
+  }
+
+  return (token: string): StreamTokenSanitizerResult => {
+    if (!token) {
+      return { cleaned: "", droppedChars: 0 };
+    }
+
+    rawBuffer += token;
+
+    const sanitizedFull = sanitizeStreamingBuffer(rawBuffer);
+    const lcp = longestCommonPrefixLength(previousSanitized, sanitizedFull);
+    const cleaned = sanitizedFull.slice(lcp);
+
+    previousSanitized = sanitizedFull;
+
+    // Keep memory bounded while preserving enough context for partial tag matching.
+    if (rawBuffer.length > 20_000) {
+      rawBuffer = rawBuffer.slice(-10_000);
+      previousSanitized = sanitizeStreamingBuffer(rawBuffer);
+    }
+
+    const droppedChars = Math.max(0, token.length - cleaned.length);
+
+    return {
+      cleaned,
+      droppedChars,
+    };
+  };
+}
+
+export function extractTextFromChatStreamChunk(chunk: unknown): string {
+  if (!chunk || typeof chunk !== "object") {
+    return "";
+  }
+
+  const maybeContent = (chunk as { content?: unknown }).content;
+  if (typeof maybeContent === "string") {
+    return maybeContent;
+  }
+
+  if (Array.isArray(maybeContent)) {
+    return maybeContent
+      .map((item) => {
+        if (typeof item === "string") {
+          return item;
+        }
+        if (
+          typeof item === "object" &&
+          item !== null &&
+          "text" in item &&
+          typeof (item as { text?: unknown }).text === "string"
+        ) {
+          return (item as { text: string }).text;
+        }
+        return "";
+      })
+      .join("");
+  }
+
+  const maybeText = (chunk as { text?: unknown }).text;
+  return typeof maybeText === "string" ? maybeText : "";
+}
+
 export function parseJsonWithSchema<T>(
   raw: string,
   schema: z.ZodSchema<T>,

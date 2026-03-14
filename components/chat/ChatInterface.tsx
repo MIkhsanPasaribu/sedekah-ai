@@ -59,6 +59,8 @@ const POLL_TIMEOUT = 10 * 60 * 1_000;
 const AGENT_INITIAL_RESPONSE_TIMEOUT = 45_000;
 /** Idle timeout stream SSE setelah response berjalan */
 const AGENT_STREAM_IDLE_TIMEOUT = 90_000;
+/** Flush interval token streaming per karakter agar render tetap ringan */
+const STREAM_TOKEN_FLUSH_INTERVAL_MS = 18;
 
 export function ChatInterface({
   initialThreadId,
@@ -82,6 +84,39 @@ export function ChatInterface({
   const isMountedRef = useRef(true);
   const historyAbortRef = useRef<AbortController | null>(null);
   const sseAbortRef = useRef<AbortController | null>(null);
+  const streamBufferRef = useRef<string>("");
+  const streamFlushTimerRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
+
+  const stopTokenFlusher = useCallback(() => {
+    if (streamFlushTimerRef.current) {
+      clearInterval(streamFlushTimerRef.current);
+      streamFlushTimerRef.current = null;
+    }
+  }, []);
+
+  const startTokenFlusher = useCallback(() => {
+    if (streamFlushTimerRef.current) return;
+
+    streamFlushTimerRef.current = setInterval(() => {
+      if (!streamBufferRef.current) {
+        stopTokenFlusher();
+        return;
+      }
+
+      const nextChar = streamBufferRef.current[0] ?? "";
+      streamBufferRef.current = streamBufferRef.current.slice(1);
+      if (!nextChar) return;
+
+      setStreamingContent((prev) => prev + nextChar);
+    }, STREAM_TOKEN_FLUSH_INTERVAL_MS);
+  }, [stopTokenFlusher]);
+
+  const resetStreamingBuffer = useCallback(() => {
+    streamBufferRef.current = "";
+    stopTokenFlusher();
+  }, [stopTokenFlusher]);
 
   // Mark unmounted to prevent setState after unmount
   useEffect(() => {
@@ -90,8 +125,9 @@ export function ChatInterface({
       isMountedRef.current = false;
       historyAbortRef.current?.abort();
       sseAbortRef.current?.abort();
+      resetStreamingBuffer();
     };
-  }, []);
+  }, [resetStreamingBuffer]);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -116,6 +152,7 @@ export function ChatInterface({
       setAgentState(createInitialAgentState());
       setNodeProgress(null);
       setStreamingContent("");
+      resetStreamingBuffer();
       setIsLoadingHistory(false);
       return;
     }
@@ -309,6 +346,7 @@ export function ChatInterface({
     setIsLoading(true);
     setNodeProgress(null);
     setStreamingContent("");
+    resetStreamingBuffer();
 
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
@@ -368,13 +406,13 @@ export function ChatInterface({
               setThreadId(data.threadId);
               onThreadChange?.(data.threadId);
             } else if (eventType === "token" && data.content) {
-              // Token-level streaming: accumulate content progressively
-              setStreamingContent((prev) => prev + data.content);
-              setNodeProgress(null); // Hide progress bar while streaming text
+              // Buffer token text and flush per-character for smoother UX.
+              streamBufferRef.current += String(data.content);
+              startTokenFlusher();
             } else if (eventType === "node") {
               setNodeProgress(data.label ?? data.node);
             } else if (eventType === "result" && data.success) {
-              setNodeProgress(null);
+              resetStreamingBuffer();
               setStreamingContent(""); // Clear streaming preview
               const assistantMessage: Message = {
                 id: `ai-${Date.now()}`,
@@ -388,7 +426,7 @@ export function ChatInterface({
                 setAgentState((prev) => ({ ...prev, ...data.state }));
               }
             } else if (eventType === "error") {
-              setNodeProgress(null);
+              resetStreamingBuffer();
               setStreamingContent("");
               const errorMessage: Message = {
                 id: `error-${Date.now()}`,
@@ -398,6 +436,8 @@ export function ChatInterface({
                 timestamp: new Date(),
               };
               setMessages((prev) => [...prev, errorMessage]);
+            } else if (eventType === "done") {
+              resetStreamingBuffer();
             }
             eventType = "";
           }
@@ -420,6 +460,7 @@ export function ChatInterface({
       }
       await safeCancelReader();
       if (isMountedRef.current) {
+        resetStreamingBuffer();
         const errorMessage: Message = {
           id: `error-${Date.now()}`,
           role: "assistant",
@@ -431,6 +472,7 @@ export function ChatInterface({
     } finally {
       clearRequestTimeout();
       await safeCancelReader();
+      resetStreamingBuffer();
       if (isMountedRef.current) {
         setIsLoading(false);
         setNodeProgress(null);
@@ -497,13 +539,18 @@ export function ChatInterface({
           />
         )}
 
-        {isLoading && !streamingContent && !showIslamicSpinner && (
+        {isLoading && !showIslamicSpinner && (
           <div className="mx-auto max-w-3xl px-4 py-4">
             {nodeProgress ? (
               <AgentProgressBar currentLabel={nodeProgress} />
-            ) : (
+            ) : !streamingContent ? (
               <MessageBubble role="assistant" content="" isLoading />
-            )}
+            ) : null}
+            {streamingContent ? (
+              <p className="mt-2 text-xs text-ink-light">
+                Amil AI sedang mengetik jawaban...
+              </p>
+            ) : null}
           </div>
         )}
 

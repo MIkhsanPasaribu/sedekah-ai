@@ -4,6 +4,7 @@ import { useState, useRef, FormEvent } from "react";
 import { ArrowUp, Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVoiceChat } from "@/hooks/useVoiceChat";
+import { chatMessageSchema } from "@/lib/validations/chat";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -17,6 +18,7 @@ export function ChatInput({
   placeholder = "Ketik pesan Anda...",
 }: ChatInputProps) {
   const [input, setInput] = useState("");
+  const [validationError, setValidationError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { isListening, isSupported, startListening, stopListening } =
@@ -32,10 +34,20 @@ export function ChatInput({
 
   function handleSubmit(e: FormEvent): void {
     e.preventDefault();
-    const trimmed = input.trim();
-    if (!trimmed || isLoading) return;
+    if (isLoading) return;
 
-    onSend(trimmed);
+    const parsed = chatMessageSchema.safeParse(input);
+    if (!parsed.success) {
+      setValidationError(
+        parsed.error.issues[0]?.message ?? "Pesan tidak valid",
+      );
+      return;
+    }
+
+    const message = parsed.data;
+    setValidationError(null);
+
+    onSend(message);
     setInput("");
 
     // Reset textarea height
@@ -55,6 +67,9 @@ export function ChatInput({
     e: React.ChangeEvent<HTMLTextAreaElement>,
   ): void {
     setInput(e.target.value);
+    if (validationError) {
+      setValidationError(null);
+    }
     // Auto-resize
     const textarea = e.target;
     textarea.style.height = "auto";
@@ -76,6 +91,7 @@ export function ChatInput({
             placeholder={placeholder}
             disabled={isLoading}
             rows={1}
+            maxLength={2000}
             className={cn(
               "flex-1 resize-none bg-transparent px-4 py-3 text-sm text-ink-dark",
               "placeholder:text-ink-light",
@@ -115,9 +131,15 @@ export function ChatInput({
             <ArrowUp className="h-4 w-4" />
           </button>
         </div>
-        <p className="mt-1.5 text-center text-[10px] text-ink-light">
-          Amil AI bisa membuat kesalahan. Verifikasi informasi penting.
-        </p>
+        {validationError ? (
+          <p className="mt-1.5 text-center text-[10px] text-danger">
+            {validationError}
+          </p>
+        ) : (
+          <p className="mt-1.5 text-center text-[10px] text-ink-light">
+            Amil AI bisa membuat kesalahan. Verifikasi informasi penting.
+          </p>
+        )}
       </form>
     </div>
   );

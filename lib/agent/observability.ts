@@ -105,6 +105,28 @@ export function recordLlmInvokeMetric(metric: LlmInvokeMetric): void {
 export function getAgentOpsSnapshot(): Record<string, unknown> {
   const llmTotal = store.llmInvoke.total;
   const streamTotal = store.agentStream.total;
+  const recentStreamMetrics = store.recentAgentStreams;
+
+  let streamsWithTokens = 0;
+  let totalTokenEvents = 0;
+  let totalTokenChars = 0;
+  let totalTokenDropped = 0;
+
+  for (const stream of recentStreamMetrics) {
+    const rawMetrics = stream.metrics;
+    const tokenEvents = Number(rawMetrics.tokenEvents ?? 0);
+    const tokenCharsSent = Number(rawMetrics.tokenCharsSent ?? 0);
+    const tokenDroppedByPolicy = Number(rawMetrics.tokenDroppedByPolicy ?? 0);
+
+    if (tokenEvents > 0) {
+      streamsWithTokens += 1;
+    }
+    totalTokenEvents += Math.max(0, tokenEvents);
+    totalTokenChars += Math.max(0, tokenCharsSent);
+    totalTokenDropped += Math.max(0, tokenDroppedByPolicy);
+  }
+
+  const totalTokenObserved = totalTokenChars + totalTokenDropped;
 
   return {
     startedAt: store.startedAt,
@@ -120,6 +142,16 @@ export function getAgentOpsSnapshot(): Record<string, unknown> {
         successRate: llmTotal > 0 ? store.llmInvoke.success / llmTotal : 0,
         avgRetryPerInvoke:
           llmTotal > 0 ? store.llmInvoke.totalRetries / llmTotal : 0,
+      },
+      tokenStream: {
+        streamsWithTokens,
+        totalTokenEvents,
+        totalTokenChars,
+        totalTokenDropped,
+        avgTokenCharsPerStream:
+          streamsWithTokens > 0 ? totalTokenChars / streamsWithTokens : 0,
+        policyDropRate:
+          totalTokenObserved > 0 ? totalTokenDropped / totalTokenObserved : 0,
       },
     },
     recent: {

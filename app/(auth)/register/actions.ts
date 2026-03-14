@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validations/auth";
+import { getAuthEmailRedirectUrl } from "@/lib/env";
 
 interface RegisterFieldErrors {
   name?: string;
@@ -46,6 +47,7 @@ export async function registerWithEmail(
     email,
     password,
     options: {
+      emailRedirectTo: getAuthEmailRedirectUrl("/chat"),
       data: {
         full_name: name,
         phone: phone || null,

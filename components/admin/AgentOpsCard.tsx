@@ -28,6 +28,14 @@ interface OpsCounters {
     successRate: number;
     avgRetryPerInvoke: number;
   };
+  tokenStream: {
+    streamsWithTokens: number;
+    totalTokenEvents: number;
+    totalTokenChars: number;
+    totalTokenDropped: number;
+    avgTokenCharsPerStream: number;
+    policyDropRate: number;
+  };
 }
 
 interface AgentOpsResponse {
@@ -78,6 +86,7 @@ export function AgentOpsCard(): ReactElement {
 
   const streamCounters = data?.counters.agentStream;
   const llmCounters = data?.counters.llmInvoke;
+  const tokenCounters = data?.counters.tokenStream;
 
   const statusTone = useMemo(() => {
     if (!streamCounters || !llmCounters) return "text-muted-foreground";
@@ -140,7 +149,7 @@ export function AgentOpsCard(): ReactElement {
           </p>
         ) : null}
 
-        {data && streamCounters && llmCounters ? (
+        {data && streamCounters && llmCounters && tokenCounters ? (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-md border p-3">
@@ -182,6 +191,57 @@ export function AgentOpsCard(): ReactElement {
               <p>Client disconnected: {streamCounters.clientDisconnected}</p>
               <p>Total LLM invoke: {llmCounters.total}</p>
               <p>Total retry LLM: {llmCounters.totalRetries}</p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">
+                  Streams dengan Token
+                </p>
+                <p className="text-lg font-semibold text-brand-green-mid">
+                  {tokenCounters.streamsWithTokens}
+                </p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">
+                  Total Token Events
+                </p>
+                <p className="text-lg font-semibold text-ink-dark">
+                  {tokenCounters.totalTokenEvents}
+                </p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">
+                  Total Karakter Terkirim
+                </p>
+                <p className="text-lg font-semibold text-ink-dark">
+                  {tokenCounters.totalTokenChars}
+                </p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">
+                  Total Token Terdrop
+                </p>
+                <p className="text-lg font-semibold text-warning">
+                  {tokenCounters.totalTokenDropped}
+                </p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">
+                  Avg Karakter per Stream
+                </p>
+                <p className="text-lg font-semibold text-brand-gold-core">
+                  {formatDecimal(tokenCounters.avgTokenCharsPerStream)}
+                </p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">
+                  Drop Rate Kebijakan
+                </p>
+                <p className="text-lg font-semibold text-danger">
+                  {formatPercent(tokenCounters.policyDropRate)}
+                </p>
+              </div>
             </div>
 
             <p className="text-xs text-muted-foreground">

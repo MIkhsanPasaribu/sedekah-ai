@@ -26,6 +26,7 @@ export interface AiRuntimeConfig {
   llmInitialRetryDelayMs: number;
   sseHeartbeatMs: number;
   fraudAnalysisTopN: number;
+  enableTokenStream: boolean;
 }
 
 function parseIntegerEnv(
@@ -80,6 +81,13 @@ export function getRequiredAppBaseUrl(): string {
   throw new Error("NEXT_PUBLIC_APP_URL belum dikonfigurasi");
 }
 
+export function getAuthEmailRedirectUrl(nextPath = "/chat"): string {
+  const safeNextPath = nextPath.startsWith("/") ? nextPath : "/chat";
+  const callbackUrl = new URL("/callback", getRequiredAppBaseUrl());
+  callbackUrl.searchParams.set("next", safeNextPath);
+  return callbackUrl.toString();
+}
+
 export function getAutopilotProductId(): string | null {
   const productId =
     process.env.MAYAR_CREDIT_PRODUCT_ID?.trim() ??
@@ -110,6 +118,7 @@ export function getAiRuntimeConfig(): AiRuntimeConfig {
       min: 1,
       max: 50,
     }),
+    enableTokenStream: process.env.AI_ENABLE_TOKEN_STREAM === "true",
   };
 }
 
