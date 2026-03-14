@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { loginSchema } from "@/lib/validations/auth";
 
 interface LoginFieldErrors {
   email?: string;
@@ -16,24 +17,21 @@ export interface LoginResult {
 export async function signInWithEmail(
   formData: FormData,
 ): Promise<LoginResult | void> {
-  const email = ((formData.get("email") as string) ?? "").trim().toLowerCase();
-  const password = (formData.get("password") as string) ?? "";
+  const parsed = loginSchema.safeParse({
+    email: formData.get("email"),
+    password: formData.get("password"),
+  });
 
-  const fieldErrors: LoginFieldErrors = {};
-
-  if (!email) {
-    fieldErrors.email = "Email wajib diisi";
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    fieldErrors.email = "Format email tidak valid";
-  }
-
-  if (!password) {
-    fieldErrors.password = "Password wajib diisi";
-  }
-
-  if (Object.keys(fieldErrors).length > 0) {
+  if (!parsed.success) {
+    const fieldErrors: LoginFieldErrors = {};
+    for (const issue of parsed.error.issues) {
+      const field = issue.path[0] as keyof LoginFieldErrors;
+      if (field) fieldErrors[field] = issue.message;
+    }
     return { fieldErrors };
   }
+
+  const { email, password } = parsed.data;
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
