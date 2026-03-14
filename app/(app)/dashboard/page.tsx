@@ -12,7 +12,13 @@ import { AutopilotCard } from "@/components/dashboard/AutopilotCard";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { formatRupiah, getDailyNudge } from "@/lib/utils";
+import {
+  formatRupiah,
+  getDailyNudge,
+  estimateBeneficiaries,
+} from "@/lib/utils";
+import { generateAiNudge } from "@/lib/nudge";
+import { FraudAlertNotification } from "@/components/dashboard/FraudAlertNotification";
 
 export const metadata = {
   title: "Dashboard — SEDEKAH.AI",
@@ -94,7 +100,19 @@ export default async function DashboardPage() {
     (d) => d.day === ramadhanDay && d.donated,
   );
 
-  const dailyNudge = getDailyNudge(ramadhanDay, donatedToday);
+  // Last donation category for personalized nudge
+  const lastCategory = paidDonations[0]?.type ?? null;
+
+  // AI-powered daily nudge with static fallback
+  const dailyNudge = dbUser
+    ? await generateAiNudge(
+        dbUser.id,
+        ramadhanDay,
+        donatedToday,
+        streak,
+        lastCategory,
+      )
+    : getDailyNudge(ramadhanDay, donatedToday);
 
   // Impact data by category
   const categoryMap = new Map<string, { amount: number; count: number }>();
@@ -113,7 +131,7 @@ export default async function DashboardPage() {
       amount,
       percentage:
         totalDonated > 0 ? Math.round((amount / totalDonated) * 100) : 0,
-      beneficiaries: Math.floor(amount / 50000), // Estimate ~Rp50k per beneficiary
+      beneficiaries: estimateBeneficiaries(amount, name),
     }),
   );
 
@@ -199,6 +217,11 @@ export default async function DashboardPage() {
             />
           </div>
         )}
+
+        {/* Fraud Alerts */}
+        <div className="mb-6">
+          <FraudAlertNotification />
+        </div>
 
         {/* Stat Cards */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -4,6 +4,8 @@ import { redirect, notFound } from "next/navigation";
 import { formatRupiah, formatTanggal } from "@/lib/utils";
 import { TrustScoreBadge } from "@/components/shared/TrustScoreBadge";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { CertificateDownloadButton } from "@/components/dashboard/CertificateDownloadButton";
+import { ImpactNarrativeCard } from "@/components/dashboard/ImpactNarrativeCard";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -13,7 +15,6 @@ import {
   Heart,
   Users,
   Sparkles,
-  Download,
   Share2,
 } from "lucide-react";
 
@@ -202,14 +203,10 @@ export default async function ImpactDetailPage({
                   </div>
 
                   {/* Certificate download */}
-                  <a
-                    href={`/api/donations/${donationId}/certificate`}
-                    download={`sertifikat-donasi-${donationId.slice(0, 8)}.png`}
-                    className="flex items-center justify-center gap-2 w-full rounded-xl border border-brand-green-deep bg-white py-3 text-sm font-bold text-brand-green-deep transition hover:bg-brand-green-ghost"
-                  >
-                    <Download className="h-4 w-4" />
-                    Unduh Sertifikat Donasi
-                  </a>
+                  <CertificateDownloadButton donationId={donationId} />
+
+                  {/* AI Impact Narrative */}
+                  <ImpactNarrativeCard donationId={donationId} />
 
                   {/* Donate again */}
                   {donation.campaign && (

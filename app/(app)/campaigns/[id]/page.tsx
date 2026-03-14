@@ -1,4 +1,5 @@
 import { CampaignDetailCard } from "@/components/campaigns/CampaignDetailCard";
+import { CampaignAiSummary } from "@/components/campaigns/CampaignAiSummary";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 
@@ -57,28 +58,38 @@ export default async function CampaignDetailPage({
   return (
     <div className="min-h-screen bg-surface-warm">
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
-        <CampaignDetailCard
-          id={campaign.id}
+        <CampaignAiSummary
           name={campaign.name}
           description={campaign.description}
-          laz={campaign.laz}
-          lazVerified={campaign.lazVerified}
-          targetAmount={campaign.targetAmount}
-          collectedAmount={campaign.collectedAmount}
-          trustScore={campaign.trustScore ?? 0}
-          trustBreakdown={trustBreakdown}
           category={campaign.category}
-          region={campaign.region}
-          endsAt={campaign.endsAt?.toISOString() ?? null}
-          fraudFlags={campaign.fraudAlerts}
-          disbursements={campaign.disbursements.map((d) => ({
-            id: d.id,
-            amount: d.amount,
-            recipientLaz: d.recipientLaz,
-            status: d.status,
-            disbursedAt: d.disbursedAt?.toISOString() ?? null,
-          }))}
+          laz={campaign.laz}
+          collectedAmount={campaign.collectedAmount}
+          targetAmount={campaign.targetAmount}
         />
+        <div className="mt-4">
+          <CampaignDetailCard
+            id={campaign.id}
+            name={campaign.name}
+            description={campaign.description}
+            laz={campaign.laz}
+            lazVerified={campaign.lazVerified}
+            targetAmount={campaign.targetAmount}
+            collectedAmount={campaign.collectedAmount}
+            trustScore={campaign.trustScore ?? 0}
+            trustBreakdown={trustBreakdown}
+            category={campaign.category}
+            region={campaign.region}
+            endsAt={campaign.endsAt?.toISOString() ?? null}
+            fraudFlags={campaign.fraudAlerts}
+            disbursements={campaign.disbursements.map((d) => ({
+              id: d.id,
+              amount: d.amount,
+              recipientLaz: d.recipientLaz,
+              status: d.status,
+              disbursedAt: d.disbursedAt?.toISOString() ?? null,
+            }))}
+          />
+        </div>
       </div>
     </div>
   );
