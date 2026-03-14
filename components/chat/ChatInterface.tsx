@@ -65,6 +65,8 @@ export function ChatInterface({
   const [showMuhasabah, setShowMuhasabah] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [nodeProgress, setNodeProgress] = useState<string | null>(null);
+  /** Token-level streaming: progressively accumulates AI response text */
+  const [streamingContent, setStreamingContent] = useState<string>("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const pollStartRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
@@ -89,7 +91,7 @@ export function ChatInterface({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, scrollToBottom]);
+  }, [messages, streamingContent, scrollToBottom]);
 
   // ------ Load Conversation History ------
   useEffect(() => {
@@ -250,6 +252,7 @@ export function ChatInterface({
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
     setNodeProgress(null);
+    setStreamingContent("");
 
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
@@ -305,10 +308,15 @@ export function ChatInterface({
             if (eventType === "thread" && data.threadId) {
               setThreadId(data.threadId);
               onThreadChange?.(data.threadId);
+            } else if (eventType === "token" && data.content) {
+              // Token-level streaming: accumulate content progressively
+              setStreamingContent((prev) => prev + data.content);
+              setNodeProgress(null); // Hide progress bar while streaming text
             } else if (eventType === "node") {
               setNodeProgress(data.label ?? data.node);
             } else if (eventType === "result" && data.success) {
               setNodeProgress(null);
+              setStreamingContent(""); // Clear streaming preview
               const assistantMessage: Message = {
                 id: `ai-${Date.now()}`,
                 role: "assistant",
@@ -322,6 +330,7 @@ export function ChatInterface({
               }
             } else if (eventType === "error") {
               setNodeProgress(null);
+              setStreamingContent("");
               const errorMessage: Message = {
                 id: `error-${Date.now()}`,
                 role: "assistant",
@@ -428,7 +437,17 @@ export function ChatInterface({
           />
         ))}
 
-        {isLoading && !showIslamicSpinner && (
+        {/* Live Token Streaming Preview */}
+        {isLoading && streamingContent && (
+          <MessageBubble
+            role="assistant"
+            content={streamingContent}
+            timestamp={new Date()}
+            isStreaming
+          />
+        )}
+
+        {isLoading && !streamingContent && !showIslamicSpinner && (
           <div className="mx-auto max-w-3xl px-4 py-4">
             {nodeProgress ? (
               <AgentProgressBar currentLabel={nodeProgress} />
