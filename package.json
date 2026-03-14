@@ -8,6 +8,7 @@
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
+    "eval:smoke": "tsx lib/eval/smoke.ts",
     "db:push": "pwsh ./scripts/db-push.ps1",
     "db:migrate": "pwsh ./scripts/db-migrate.ps1",
     "db:studio": "npx prisma studio",

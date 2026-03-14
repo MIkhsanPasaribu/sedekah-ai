@@ -16,8 +16,10 @@ import {
 } from "@langchain/core/messages";
 import { buildAgentMessage } from "@/lib/agent/utils";
 import { sanitizeModelOutput } from "@/lib/agent/utils";
+import { invokeWithRetryAndTimeout } from "@/lib/agent/utils";
 import { z } from "zod";
 import type { SedekahState } from "../state";
+import { getAiRuntimeConfig } from "@/lib/env";
 
 function detectDonationIntent(text: string): SedekahState["donorIntent"] {
   const normalized = text.toLowerCase();
@@ -62,6 +64,7 @@ const conversationalLlm = new ChatGroq({
   temperature: 0.7,
   apiKey: process.env.GROQ_API_KEY,
 });
+const aiRuntime = getAiRuntimeConfig();
 
 const intakeExtractionSchema = z.object({
   donorIntent: z
@@ -72,41 +75,57 @@ const intakeExtractionSchema = z.object({
     ),
   customAmount: z
     .number()
+    .positive()
+    .max(1_000_000_000_000)
     .nullable()
     .describe(
       "Nominal donasi eksplisit dalam Rupiah (misal 100000 untuk Rp 100k), null jika tidak disebutkan",
     ),
   penghasilan: z
     .number()
+    .min(0)
+    .max(1_000_000_000_000)
     .nullable()
     .describe("Penghasilan per tahun dalam Rupiah, null jika tidak disebutkan"),
   tabungan: z
     .number()
+    .min(0)
+    .max(1_000_000_000_000)
     .nullable()
     .describe("Total tabungan dalam Rupiah, null jika tidak disebutkan"),
   emas: z
     .number()
+    .min(0)
+    .max(50_000)
     .nullable()
     .describe(
       "Berat emas dalam gram (bukan Rupiah), null jika tidak disebutkan",
     ),
   saham: z
     .number()
+    .min(0)
+    .max(1_000_000_000_000)
     .nullable()
     .describe(
       "Nilai portofolio saham/investasi dalam Rupiah, null jika tidak disebutkan",
     ),
   crypto: z
     .number()
+    .min(0)
+    .max(1_000_000_000_000)
     .nullable()
     .describe("Nilai aset crypto dalam Rupiah, null jika tidak disebutkan"),
   hutang: z
     .number()
+    .min(0)
+    .max(1_000_000_000_000)
     .nullable()
     .describe("Total hutang dalam Rupiah, null jika tidak disebutkan"),
   jumlahJiwa: z
     .number()
     .int()
+    .min(0)
+    .max(100)
     .nullable()
     .describe(
       "Jumlah anggota keluarga untuk zakat fitrah, null jika tidak disebutkan",
@@ -194,11 +213,30 @@ export async function intakeNode(
 
   // Run both LLM calls in parallel for efficiency
   const [conversationalResponse, extracted] = await Promise.all([
-    conversationalLlm.invoke([
-      new SystemMessage(CONVERSATIONAL_SYSTEM_PROMPT),
-      ...messages,
-    ]),
-    extractionLlm.invoke(extractionMessages).catch(() => null),
+    invokeWithRetryAndTimeout(
+      () =>
+        conversationalLlm.invoke([
+          new SystemMessage(CONVERSATIONAL_SYSTEM_PROMPT),
+          ...messages,
+        ]),
+      {
+        timeoutMs: aiRuntime.llmTimeoutMs,
+        maxRetries: aiRuntime.llmMaxRetries,
+        initialRetryDelayMs: aiRuntime.llmInitialRetryDelayMs,
+        operationName: "intake.conversational_response",
+      },
+    ).catch(
+      () =>
+        new AIMessage(
+          "Assalamu'alaikum. Alhamdulillah, niat baik Anda sangat berarti. Silakan lanjutkan dengan detail kebutuhan donasi Anda agar saya bantu proseskan.",
+        ),
+    ),
+    invokeWithRetryAndTimeout(() => extractionLlm.invoke(extractionMessages), {
+      timeoutMs: aiRuntime.llmTimeoutMs,
+      maxRetries: aiRuntime.llmMaxRetries,
+      initialRetryDelayMs: aiRuntime.llmInitialRetryDelayMs,
+      operationName: "intake.structured_extraction",
+    }).catch(() => null),
   ]);
 
   const cleanContent =

@@ -20,6 +20,33 @@ export interface MayarRuntimeConfig {
   baseUrl: string;
 }
 
+export interface AiRuntimeConfig {
+  llmTimeoutMs: number;
+  llmMaxRetries: number;
+  llmInitialRetryDelayMs: number;
+  sseHeartbeatMs: number;
+  fraudAnalysisTopN: number;
+}
+
+function parseIntegerEnv(
+  name: string,
+  fallback: number,
+  options: { min: number; max?: number },
+): number {
+  const rawValue = process.env[name]?.trim();
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(rawValue, 10);
+  const max = options.max ?? Number.MAX_SAFE_INTEGER;
+  if (Number.isNaN(parsed) || parsed < options.min || parsed > max) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
 export function getMayarRuntimeConfig(): MayarRuntimeConfig {
   const apiKey = process.env.MAYAR_API_KEY?.trim();
   if (!apiKey) {
@@ -59,4 +86,33 @@ export function getAutopilotProductId(): string | null {
     process.env.MAYAR_AUTOPILOT_PRODUCT_ID?.trim() ??
     null;
   return productId && productId.length > 0 ? productId : null;
+}
+
+export function getAiRuntimeConfig(): AiRuntimeConfig {
+  return {
+    llmTimeoutMs: parseIntegerEnv("AI_LLM_TIMEOUT_MS", 8_000, {
+      min: 1_000,
+      max: 60_000,
+    }),
+    llmMaxRetries: parseIntegerEnv("AI_LLM_MAX_RETRIES", 1, {
+      min: 0,
+      max: 5,
+    }),
+    llmInitialRetryDelayMs: parseIntegerEnv("AI_LLM_RETRY_DELAY_MS", 600, {
+      min: 100,
+      max: 10_000,
+    }),
+    sseHeartbeatMs: parseIntegerEnv("AI_SSE_HEARTBEAT_MS", 15_000, {
+      min: 5_000,
+      max: 60_000,
+    }),
+    fraudAnalysisTopN: parseIntegerEnv("FRAUD_ANALYSIS_TOP_N", 8, {
+      min: 1,
+      max: 50,
+    }),
+  };
+}
+
+export function getFraudAnalysisTopN(): number {
+  return getAiRuntimeConfig().fraudAnalysisTopN;
 }

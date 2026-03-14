@@ -8,6 +8,11 @@ import { createClient } from "@/lib/supabase/server";
 import { ChatGroq } from "@langchain/groq";
 import { prisma } from "@/lib/prisma";
 import { formatRupiah } from "@/lib/utils";
+import {
+  invokeWithRetryAndTimeout,
+  sanitizeModelOutput,
+} from "@/lib/agent/utils";
+import { getAiRuntimeConfig } from "@/lib/env";
 
 export const runtime = "nodejs";
 
@@ -51,6 +56,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     temperature: 0.7,
     apiKey: process.env.GROQ_API_KEY,
   });
+  const aiRuntime = getAiRuntimeConfig();
 
   const donorName = donation.user?.name ?? "Donatur";
   const campaignName = donation.campaign?.name ?? "Donasi Umum";
@@ -58,19 +64,38 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const amount = formatRupiah(donation.amount);
   const typeLabel = donation.type.replace(/_/g, " ");
 
-  const res = await llm.invoke([
-    {
-      role: "system",
-      content:
-        "Kamu adalah pencerita islami. Tulis cerita singkat (3-4 paragraf) dalam Bahasa Indonesia yang menggambarkan dampak nyata dari donasi ini. Ceritakan perjalanan dari niat donatur hingga manfaat yang dirasakan penerima. Gunakan bahasa yang menyentuh, penuh syukur, dan dibuka dengan Alhamdulillah.",
-    },
-    {
-      role: "user",
-      content: `Nama donatur: ${donorName}\nJenis donasi: ${typeLabel}\nKampanye: ${campaignName}\nKategori: ${category}\nNominal: ${amount}`,
-    },
-  ]);
+  const fallbackNarrative = [
+    `Alhamdulillah, niat baik ${donorName} untuk berbagi melalui ${campaignName} menjadi wasilah kebaikan yang nyata.`,
+    `Donasi sebesar ${amount} untuk program ${typeLabel.toLowerCase()} membuka jalan bantuan yang lebih cepat bagi penerima manfaat di kategori ${category || "sosial"}.`,
+    "Setiap amanah yang dititipkan membantu tim lapangan menyalurkan bantuan secara tepat sasaran, terukur, dan penuh tanggung jawab.",
+    "Semoga Allah menerima amal ini, melipatgandakan pahalanya, dan menghadirkan keberkahan berkelanjutan bagi semua pihak.",
+  ].join("\n\n");
 
-  const narrative = String(res.content).trim();
+  const narrativeResponse = await invokeWithRetryAndTimeout(
+    () =>
+      llm.invoke([
+        {
+          role: "system",
+          content:
+            "Kamu adalah pencerita islami. Tulis cerita singkat (3-4 paragraf) dalam Bahasa Indonesia yang menggambarkan dampak nyata dari donasi ini. Ceritakan perjalanan dari niat donatur hingga manfaat yang dirasakan penerima. Gunakan bahasa yang menyentuh, penuh syukur, dan dibuka dengan Alhamdulillah.",
+        },
+        {
+          role: "user",
+          content: `Nama donatur: ${donorName}\nJenis donasi: ${typeLabel}\nKampanye: ${campaignName}\nKategori: ${category}\nNominal: ${amount}`,
+        },
+      ]),
+    {
+      timeoutMs: aiRuntime.llmTimeoutMs,
+      maxRetries: aiRuntime.llmMaxRetries,
+      initialRetryDelayMs: aiRuntime.llmInitialRetryDelayMs,
+      operationName: "impact.narrative_generation",
+    },
+  ).catch(() => null);
+
+  const narrativeRaw = narrativeResponse
+    ? String(narrativeResponse.content)
+    : fallbackNarrative;
+  const narrative = sanitizeModelOutput(narrativeRaw).trim();
 
   return NextResponse.json({ narrative });
 }

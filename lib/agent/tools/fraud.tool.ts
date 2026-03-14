@@ -7,8 +7,10 @@ import { z } from "zod";
 import { ChatGroq } from "@langchain/groq";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { FraudScore } from "../state";
+import { invokeWithRetryAndTimeout } from "@/lib/agent/utils";
+import { getAiRuntimeConfig } from "@/lib/env";
 
-const NARRATIVE_TIMEOUT_MS = 8_000;
+const aiRuntime = getAiRuntimeConfig();
 
 const analyzeFraudSchema = z.object({
   campaigns: z
@@ -118,21 +120,23 @@ export const analyzeFraudTool = tool(
         const ruleBasedNarrativeScore = Math.max(20, 90 - narrativeFlags * 15);
 
         // LLM-based narrative analysis (temp=0 for determinism, fallback to rule-based)
-        const llmNarrativeResult = await Promise.race([
-          narrativeAnalysisLlm
-            .invoke([
+        const llmNarrativeResult = await invokeWithRetryAndTimeout(
+          () =>
+            narrativeAnalysisLlm.invoke([
               new SystemMessage(
                 "Anda adalah analis penipuan donasi online. Analisis apakah teks kampanye menggunakan teknik manipulasi psikologis seperti FOMO, urgensi palsu, atau klaim berlebihan. Berikan skor manipulasi 0-100 di mana 0=tidak ada manipulasi (terpercaya) dan 100=sangat manipulatif (berisiko tinggi).",
               ),
               new HumanMessage(
                 `Nama kampanye: ${campaign.name}\n\nDeskripsi: ${campaign.description}`,
               ),
-            ])
-            .catch(() => null),
-          new Promise<null>((resolve) => {
-            setTimeout(() => resolve(null), NARRATIVE_TIMEOUT_MS);
-          }),
-        ]);
+            ]),
+          {
+            timeoutMs: aiRuntime.llmTimeoutMs,
+            maxRetries: aiRuntime.llmMaxRetries,
+            initialRetryDelayMs: aiRuntime.llmInitialRetryDelayMs,
+            operationName: "fraud.narrative_analysis",
+          },
+        ).catch(() => null);
 
         // Hybrid: 40% rule-based + 60% LLM (manipulationScore inverted to trust scale)
         const llmTrustScore = llmNarrativeResult

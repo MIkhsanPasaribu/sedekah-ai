@@ -5,6 +5,7 @@
 // Transplant RUANG HATI: MuhasabahTrigger
 
 import { buildAgentMessage } from "@/lib/agent/utils";
+import { parseJsonWithSchema } from "@/lib/agent/utils";
 import type { SedekahState, ImpactReport, ImpactItem } from "../state";
 import { getIslamicContextTool } from "../tools/islamic-context.tool";
 import {
@@ -13,6 +14,17 @@ import {
   resolveImpactCategory,
 } from "@/lib/utils";
 import { getDonationReflection } from "@/lib/islamic-quotes";
+import { z } from "zod";
+
+const islamicContextResultSchema = z.object({
+  success: z.boolean(),
+  quote: z
+    .object({
+      reference: z.string(),
+      translation: z.string(),
+    })
+    .optional(),
+});
 
 export async function impactTrackerNode(
   state: SedekahState,
@@ -64,11 +76,15 @@ export async function impactTrackerNode(
     category: "umum",
     type: "doa",
   });
-  const contextData = JSON.parse(contextResult);
+  const contextData = parseJsonWithSchema(
+    contextResult,
+    islamicContextResultSchema,
+  );
 
-  const ayat = contextData.success
-    ? `${contextData.quote.reference}: "${contextData.quote.translation}"`
-    : 'QS Ibrahim (14:7): "Sesungguhnya jika kamu bersyukur, pasti Kami akan menambah (nikmat) kepadamu."';
+  const ayat =
+    contextData?.success && contextData.quote
+      ? `${contextData.quote.reference}: "${contextData.quote.translation}"`
+      : 'QS Ibrahim (14:7): "Sesungguhnya jika kamu bersyukur, pasti Kami akan menambah (nikmat) kepadamu."';
 
   const reflectionMessage = getDonationReflection(donorIntent);
 

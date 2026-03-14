@@ -16,6 +16,7 @@ import {
   TrendingUp,
   Building2,
 } from "lucide-react";
+import { AgentOpsCard } from "@/components/admin/AgentOpsCard";
 
 export default async function AdminPage() {
   // Aggregate stats
@@ -189,6 +190,8 @@ export default async function AdminPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AgentOpsCard />
     </div>
   );
 }

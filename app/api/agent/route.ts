@@ -12,6 +12,8 @@ import { checkRateLimitPersistent } from "@/lib/rate-limiter";
 import { inferUserName } from "@/lib/auth/infer-user-name";
 import type { Prisma } from "@/generated/prisma/client";
 import { sanitizeModelOutput } from "@/lib/agent/utils";
+import { getAiRuntimeConfig } from "@/lib/env";
+import { recordAgentStreamMetric } from "@/lib/agent/observability";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -31,7 +33,87 @@ const NODE_LABELS: Record<string, string> = {
   IMPACT_TRACKER: "Menyiapkan laporan dampak...",
 };
 
+const REDACTED_KEY_PATTERN =
+  /(email|token|authorization|cookie|password|secret|content|message|metadata|body)/i;
+
+function sanitizeLogValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value.length > 240 ? `${value.slice(0, 240)}...` : value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map((item) => sanitizeLogValue(item));
+  }
+
+  if (typeof value === "object" && value !== null) {
+    return sanitizeLogPayload(value as Record<string, unknown>);
+  }
+
+  return value;
+}
+
+function sanitizeLogPayload(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (REDACTED_KEY_PATTERN.test(key)) {
+      sanitized[key] = "[REDACTED]";
+      continue;
+    }
+
+    sanitized[key] = sanitizeLogValue(value);
+  }
+
+  return sanitized;
+}
+
+function logAgentEvent(
+  level: "info" | "warn" | "error",
+  event: string,
+  correlationId: string,
+  payload: Record<string, unknown> = {},
+): void {
+  const safePayload = sanitizeLogPayload(payload);
+  const entry = {
+    timestamp: new Date().toISOString(),
+    level,
+    event,
+    correlationId,
+    ...safePayload,
+  };
+
+  const line = JSON.stringify(entry);
+  if (level === "error") {
+    console.error(line);
+    return;
+  }
+  if (level === "warn") {
+    console.warn(line);
+    return;
+  }
+  console.log(line);
+}
+
+function jsonWithCorrelation(
+  body: Record<string, unknown>,
+  status: number,
+  correlationId: string,
+): NextResponse {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "x-correlation-id": correlationId,
+    },
+  });
+}
+
 export async function POST(req: NextRequest): Promise<Response> {
+  const correlationId =
+    req.headers.get("x-correlation-id")?.trim() || crypto.randomUUID();
+  const requestStartMs = Date.now();
+
   try {
     const body = await req.json();
     const { messages, threadId, action } = body as {
@@ -39,6 +121,12 @@ export async function POST(req: NextRequest): Promise<Response> {
       threadId?: string;
       action?: "approve" | "edit";
     };
+
+    logAgentEvent("info", "agent.request.received", correlationId, {
+      action: action ?? null,
+      incomingThreadId: threadId ?? null,
+      messageCount: messages?.length ?? 0,
+    });
 
     const resolvedThreadId = threadId ?? crypto.randomUUID();
     const config = { configurable: { thread_id: resolvedThreadId } };
@@ -49,18 +137,27 @@ export async function POST(req: NextRequest): Promise<Response> {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user?.email) {
-      return NextResponse.json(
+      logAgentEvent("warn", "agent.auth.unauthorized", correlationId, {
+        threadId: resolvedThreadId,
+      });
+      return jsonWithCorrelation(
         { error: "Silakan login terlebih dahulu" },
-        { status: 401 },
+        401,
+        correlationId,
       );
     }
 
     // Rate limiting (persistent, DB-backed)
     const allowed = await checkRateLimitPersistent(user.id);
     if (!allowed) {
-      return NextResponse.json(
+      logAgentEvent("warn", "agent.rate_limited", correlationId, {
+        userId: user.id,
+        threadId: resolvedThreadId,
+      });
+      return jsonWithCorrelation(
         { error: "Terlalu banyak permintaan. Mohon tunggu beberapa menit." },
-        { status: 429 },
+        429,
+        correlationId,
       );
     }
     const donorEmail: string = user.email;
@@ -83,9 +180,13 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
     const dbUserId = dbUser?.id;
     if (!dbUserId) {
-      return NextResponse.json(
+      logAgentEvent("error", "agent.user.resolve_failed", correlationId, {
+        threadId: resolvedThreadId,
+      });
+      return jsonWithCorrelation(
         { error: "Gagal memproses akun pengguna. Silakan coba lagi." },
-        { status: 500 },
+        500,
+        correlationId,
       );
     }
     const donorName: string = dbUser?.name ?? user.email.split("@")[0];
@@ -139,6 +240,10 @@ export async function POST(req: NextRequest): Promise<Response> {
 
         // Conversation may be deleted while stream is running. Recreate and retry once.
         if (code === "P2003") {
+          logAgentEvent("warn", "agent.message.retry_after_fk", correlationId, {
+            threadId: resolvedThreadId,
+            role: data.role,
+          });
           const recoveredConversationId = await ensureConversationId();
           await prisma.message.create({
             data: {
@@ -172,16 +277,18 @@ export async function POST(req: NextRequest): Promise<Response> {
       graphInput = new Command({ resume: action });
     } else {
       if (!messages || messages.length === 0) {
-        return NextResponse.json(
+        return jsonWithCorrelation(
           { error: "Pesan tidak boleh kosong" },
-          { status: 400 },
+          400,
+          correlationId,
         );
       }
       const lastMessage = messages[messages.length - 1];
       if (!lastMessage?.content) {
-        return NextResponse.json(
+        return jsonWithCorrelation(
           { error: "Pesan terakhir tidak valid" },
-          { status: 400 },
+          400,
+          correlationId,
         );
       }
       if (conversationId) {
@@ -232,10 +339,31 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     // --- SSE Streaming with Token-Level Events ---
     const encoder = new TextEncoder();
+    const aiRuntime = getAiRuntimeConfig();
 
     const stream = new ReadableStream({
       async start(controller) {
         let isControllerClosed = false;
+        let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+        const streamStartedAtMs = Date.now();
+        const metrics = {
+          heartbeatCount: 0,
+          eventCounts: {} as Record<string, number>,
+          nodeSequence: [] as string[],
+          nodeDurationsMs: {} as Record<string, number>,
+          sendFailureCount: 0,
+          responseFallbackUsed: false,
+        };
+        let streamResult: "completed" | "errored" | "client_disconnected" =
+          "completed";
+        let needsApprovalValue: boolean | null = null;
+        let currentNode = "";
+        let currentNodeStartedAtMs = Date.now();
+
+        logAgentEvent("info", "agent.stream.started", correlationId, {
+          threadId: resolvedThreadId,
+          action: action ?? null,
+        });
 
         function send(event: string, data: unknown): boolean {
           if (isControllerClosed) return false;
@@ -254,6 +382,8 @@ export async function POST(req: NextRequest): Promise<Response> {
               (error.message.includes("Controller is already closed") ||
                 error.message.includes("Invalid state"))
             ) {
+              metrics.sendFailureCount += 1;
+              streamResult = "client_disconnected";
               isControllerClosed = true;
               return false;
             }
@@ -266,6 +396,18 @@ export async function POST(req: NextRequest): Promise<Response> {
             return;
           }
 
+          send("meta", { correlationId });
+
+          heartbeatTimer = setInterval(() => {
+            metrics.heartbeatCount += 1;
+            if (!send("heartbeat", { timestamp: Date.now() })) {
+              if (heartbeatTimer) {
+                clearInterval(heartbeatTimer);
+                heartbeatTimer = null;
+              }
+            }
+          }, aiRuntime.sseHeartbeatMs);
+
           // Use streamEvents for token-level streaming —
           // this gives us both node progress AND individual LLM tokens
           const eventStream = graph.streamEvents(graphInput, {
@@ -273,22 +415,31 @@ export async function POST(req: NextRequest): Promise<Response> {
             version: "v2",
           });
 
-          let currentNode = "";
-
           for await (const event of eventStream) {
             if (isControllerClosed) {
+              streamResult = "client_disconnected";
               break;
             }
 
             const eventKind: string = event.event;
+            metrics.eventCounts[eventKind] =
+              (metrics.eventCounts[eventKind] ?? 0) + 1;
 
             // Track which node is currently executing
             if (eventKind === "on_chain_start" && event.name) {
               const nodeName = event.name;
               if (NODE_LABELS[nodeName]) {
+                if (currentNode) {
+                  metrics.nodeDurationsMs[currentNode] =
+                    (metrics.nodeDurationsMs[currentNode] ?? 0) +
+                    (Date.now() - currentNodeStartedAtMs);
+                }
                 currentNode = nodeName;
+                currentNodeStartedAtMs = Date.now();
+                metrics.nodeSequence.push(nodeName);
                 const label = NODE_LABELS[nodeName];
                 if (!send("node", { node: nodeName, label })) {
+                  streamResult = "client_disconnected";
                   break;
                 }
               }
@@ -306,9 +457,16 @@ export async function POST(req: NextRequest): Promise<Response> {
             return;
           }
 
+          if (currentNode) {
+            metrics.nodeDurationsMs[currentNode] =
+              (metrics.nodeDurationsMs[currentNode] ?? 0) +
+              (Date.now() - currentNodeStartedAtMs);
+          }
+
           // Get final state and check for interrupts
           const graphState = await graph.getState(config);
           const needsApproval = graphState.next.length > 0;
+          needsApprovalValue = needsApproval;
           const finalState = graphState.values as Record<string, unknown>;
 
           // Extract last AI message
@@ -328,6 +486,8 @@ export async function POST(req: NextRequest): Promise<Response> {
               : needsApproval
                 ? "Berikut rekomendasi donasi Anda. Silakan konfirmasi untuk melanjutkan pembayaran."
                 : "Maaf, terjadi kesalahan. Silakan coba lagi.";
+          metrics.responseFallbackUsed =
+            typeof lastAiMessage?.content !== "string";
           const responseContent = sanitizeModelOutput(responseContentRaw);
 
           const stateSnapshot = {
@@ -359,18 +519,38 @@ export async function POST(req: NextRequest): Promise<Response> {
               state: stateSnapshot,
             })
           ) {
+            streamResult = "client_disconnected";
             return;
           }
 
           send("done", {});
+
+          logAgentEvent("info", "agent.stream.completed", correlationId, {
+            threadId: resolvedThreadId,
+            durationMs: Date.now() - streamStartedAtMs,
+            needsApproval,
+            metrics,
+          });
         } catch (error) {
-          console.error("[Agent API Streaming Error]:", error);
+          streamResult = "errored";
+          const errorMessage =
+            error instanceof Error ? error.message : "unknown_error";
+          logAgentEvent("error", "agent.stream.error", correlationId, {
+            threadId: resolvedThreadId,
+            error: errorMessage,
+            metrics,
+          });
           const message =
             error instanceof Error && error.message.includes("API key")
               ? "Konfigurasi AI belum lengkap. Hubungi administrator."
               : "Maaf, terjadi kendala teknis. Silakan coba beberapa saat lagi. 🤲";
           send("error", { error: message });
         } finally {
+          if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+            heartbeatTimer = null;
+          }
+
           if (!isControllerClosed) {
             try {
               controller.close();
@@ -379,8 +559,38 @@ export async function POST(req: NextRequest): Promise<Response> {
             }
             isControllerClosed = true;
           }
+
+          if (streamResult !== "completed") {
+            logAgentEvent(
+              "warn",
+              "agent.stream.finished_nonstandard",
+              correlationId,
+              {
+                threadId: resolvedThreadId,
+                result: streamResult,
+                durationMs: Date.now() - streamStartedAtMs,
+                metrics,
+              },
+            );
+          }
+
+          recordAgentStreamMetric({
+            timestamp: new Date().toISOString(),
+            correlationId,
+            threadId: resolvedThreadId,
+            durationMs: Date.now() - streamStartedAtMs,
+            result: streamResult,
+            action: action ?? null,
+            needsApproval: needsApprovalValue,
+            metrics,
+          });
         }
       },
+    });
+
+    logAgentEvent("info", "agent.request.streaming_response", correlationId, {
+      threadId: resolvedThreadId,
+      durationMs: Date.now() - requestStartMs,
     });
 
     return new Response(stream, {
@@ -388,17 +598,24 @@ export async function POST(req: NextRequest): Promise<Response> {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
+        "x-correlation-id": correlationId,
       },
     });
   } catch (error) {
-    console.error("[Agent API Error]:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "unknown_error";
+    logAgentEvent("error", "agent.request.error", correlationId, {
+      error: errorMessage,
+      durationMs: Date.now() - requestStartMs,
+    });
     const message =
       error instanceof Error && error.message.includes("API key")
         ? "Konfigurasi AI belum lengkap. Hubungi administrator."
         : "Maaf, terjadi kendala teknis. Silakan coba beberapa saat lagi. 🤲";
-    return NextResponse.json(
+    return jsonWithCorrelation(
       { error: message, success: false },
-      { status: 500 },
+      500,
+      correlationId,
     );
   }
 }

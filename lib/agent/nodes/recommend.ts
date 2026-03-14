@@ -7,15 +7,29 @@
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { buildAgentMessage } from "@/lib/agent/utils";
 import { sanitizeModelOutput } from "@/lib/agent/utils";
+import { invokeWithRetryAndTimeout } from "@/lib/agent/utils";
+import { parseJsonWithSchema } from "@/lib/agent/utils";
 import { ChatGroq } from "@langchain/groq";
 import type { SedekahState, Recommendation, AllocationItem } from "../state";
 import { getIslamicContextTool } from "../tools/islamic-context.tool";
 import { formatRupiah } from "@/lib/utils";
+import { getAiRuntimeConfig } from "@/lib/env";
+import { z } from "zod";
 
 const personalizationLlm = new ChatGroq({
   model: "qwen/qwen3-32b",
   temperature: 0.7,
   apiKey: process.env.GROQ_API_KEY,
+});
+const aiRuntime = getAiRuntimeConfig();
+const islamicContextResultSchema = z.object({
+  success: z.boolean(),
+  quote: z
+    .object({
+      reference: z.string(),
+      translation: z.string(),
+    })
+    .optional(),
 });
 
 export async function recommendNode(
@@ -127,10 +141,14 @@ export async function recommendNode(
       | "umum",
     type: "hadith",
   });
-  const contextData = JSON.parse(contextResult);
-  const islamicContext = contextData.success
-    ? `${contextData.quote.reference}: "${contextData.quote.translation}"`
-    : "";
+  const contextData = parseJsonWithSchema(
+    contextResult,
+    islamicContextResultSchema,
+  );
+  const islamicContext =
+    contextData?.success && contextData.quote
+      ? `${contextData.quote.reference}: "${contextData.quote.translation}"`
+      : "";
 
   const recommendation: Recommendation = {
     allocations,
@@ -146,16 +164,25 @@ export async function recommendNode(
   let personalizedIntro = "";
   try {
     const campaignNames = allocations.map((a) => a.campaignName).join(", ");
-    const personalizationResponse = await personalizationLlm.invoke([
-      new SystemMessage(
-        "Anda adalah asisten donasi islami yang hangat dan empatik. Tulis 2-3 kalimat Bahasa Indonesia yang personal dan menyentuh hati untuk menjelaskan mengapa rekomendasi kampanye ini tepat untuk niat donasi pengguna. Jangan sebut angka nominal. Tutup dengan doa singkat.",
-      ),
-      new HumanMessage(
-        `Niat donasi: ${
-          donorIntent ?? "sedekah"
-        }\nKampanye yang direkomendasikan: ${campaignNames}`,
-      ),
-    ]);
+    const personalizationResponse = await invokeWithRetryAndTimeout(
+      () =>
+        personalizationLlm.invoke([
+          new SystemMessage(
+            "Anda adalah asisten donasi islami yang hangat dan empatik. Tulis 2-3 kalimat Bahasa Indonesia yang personal dan menyentuh hati untuk menjelaskan mengapa rekomendasi kampanye ini tepat untuk niat donasi pengguna. Jangan sebut angka nominal. Tutup dengan doa singkat.",
+          ),
+          new HumanMessage(
+            `Niat donasi: ${
+              donorIntent ?? "sedekah"
+            }\nKampanye yang direkomendasikan: ${campaignNames}`,
+          ),
+        ]),
+      {
+        timeoutMs: aiRuntime.llmTimeoutMs,
+        maxRetries: aiRuntime.llmMaxRetries,
+        initialRetryDelayMs: aiRuntime.llmInitialRetryDelayMs,
+        operationName: "recommend.personalization_intro",
+      },
+    );
     personalizedIntro =
       sanitizeModelOutput(String(personalizationResponse.content)) + "\n\n";
   } catch {

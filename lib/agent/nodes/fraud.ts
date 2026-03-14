@@ -4,11 +4,29 @@
 // NLP trust scoring, temporal + network analysis
 
 import { buildAgentMessage } from "@/lib/agent/utils";
+import { parseJsonWithSchema } from "@/lib/agent/utils";
 import type { SedekahState, FraudScore } from "../state";
 import { analyzeFraudTool } from "../tools/fraud.tool";
 import { getTrustScoreLabel } from "@/lib/utils";
+import { getFraudAnalysisTopN } from "@/lib/env";
+import { z } from "zod";
 
-const FRAUD_ANALYSIS_TOP_N = 8;
+const fraudToolResultSchema = z.object({
+  success: z.boolean(),
+  fraudScores: z.record(
+    z.string(),
+    z.object({
+      campaignId: z.string(),
+      overallScore: z.number(),
+      narrativeScore: z.number(),
+      financialScore: z.number(),
+      temporalScore: z.number(),
+      identityScore: z.number(),
+      reasoning: z.string(),
+      flags: z.array(z.string()),
+    }),
+  ),
+});
 
 export async function fraudDetectorNode(
   state: SedekahState,
@@ -28,6 +46,7 @@ export async function fraudDetectorNode(
   }
 
   // Keep latency predictable by analyzing only the most relevant campaigns.
+  const fraudAnalysisTopN = getFraudAnalysisTopN();
   const prioritizedCampaigns = [...campaigns].sort((a, b) => {
     const unmetRatioA =
       (a.targetAmount - a.collectedAmount) / Math.max(a.targetAmount, 1);
@@ -40,10 +59,7 @@ export async function fraudDetectorNode(
     return relevanceB - relevanceA;
   });
 
-  const campaignsForAnalysis = prioritizedCampaigns.slice(
-    0,
-    FRAUD_ANALYSIS_TOP_N,
-  );
+  const campaignsForAnalysis = prioritizedCampaigns.slice(0, fraudAnalysisTopN);
   const skippedCount = Math.max(
     0,
     campaigns.length - campaignsForAnalysis.length,
@@ -66,8 +82,8 @@ export async function fraudDetectorNode(
     })),
   });
 
-  const parsed = JSON.parse(fraudResult);
-  const fraudScores: Record<string, FraudScore> = parsed.fraudScores ?? {};
+  const parsed = parseJsonWithSchema(fraudResult, fraudToolResultSchema);
+  const fraudScores: Record<string, FraudScore> = parsed?.fraudScores ?? {};
 
   // Build summary message
   const lines: string[] = [`🛡️ **Analisis Fraud Shield AI**\n`];

@@ -6,6 +6,7 @@
 
 import { SystemMessage } from "@langchain/core/messages";
 import { buildAgentMessage } from "@/lib/agent/utils";
+import { parseJsonWithSchema } from "@/lib/agent/utils";
 import type { SedekahState } from "../state";
 import { zakatCalculatorTool } from "../tools/zakat.tool";
 import { getIslamicContextTool } from "../tools/islamic-context.tool";
@@ -17,6 +18,29 @@ import {
   formatRupiah,
 } from "@/lib/utils";
 import type { ZakatBreakdown } from "../state";
+import { z } from "zod";
+
+const islamicContextResultSchema = z.object({
+  success: z.boolean(),
+  quote: z
+    .object({
+      reference: z.string(),
+      translation: z.string(),
+    })
+    .optional(),
+});
+
+const zakatBreakdownSchema = z.object({
+  zakatPenghasilan: z.number(),
+  zakatTabungan: z.number(),
+  zakatEmas: z.number(),
+  zakatSaham: z.number(),
+  zakatCrypto: z.number(),
+  zakatFitrah: z.number(),
+  totalKewajiban: z.number(),
+  memenuhiNisab: z.boolean(),
+  detailPerhitungan: z.string(),
+});
 
 export async function calculateNode(
   state: SedekahState,
@@ -40,11 +64,15 @@ export async function calculateNode(
           | "pangan") ?? "sedekah",
       type: "any",
     });
-    const contextData = JSON.parse(contextResult);
+    const contextData = parseJsonWithSchema(
+      contextResult,
+      islamicContextResultSchema,
+    );
 
-    const islamicContext = contextData.success
-      ? `${contextData.quote.reference}: "${contextData.quote.translation}"`
-      : null;
+    const islamicContext =
+      contextData?.success && contextData.quote
+        ? `${contextData.quote.reference}: "${contextData.quote.translation}"`
+        : null;
 
     return {
       messages: [
@@ -68,18 +96,33 @@ export async function calculateNode(
     jumlahJiwa: userFinancialData.jumlahJiwa ?? 0,
   });
 
-  const zakatBreakdown: ZakatBreakdown = JSON.parse(zakatResult);
+  const parsedZakat = parseJsonWithSchema(zakatResult, zakatBreakdownSchema);
+  const zakatBreakdown: ZakatBreakdown = parsedZakat ?? {
+    zakatPenghasilan: 0,
+    zakatTabungan: 0,
+    zakatEmas: 0,
+    zakatSaham: 0,
+    zakatCrypto: 0,
+    zakatFitrah: 0,
+    totalKewajiban: 0,
+    memenuhiNisab: false,
+    detailPerhitungan: "Perhitungan belum tersedia.",
+  };
 
   // Ambil Islamic context: QS 9:103 untuk zakat
   const contextResult = await getIslamicContextTool.invoke({
     category: "zakat",
     type: "ayat",
   });
-  const contextData = JSON.parse(contextResult);
+  const contextData = parseJsonWithSchema(
+    contextResult,
+    islamicContextResultSchema,
+  );
 
-  const islamicContext = contextData.success
-    ? `${contextData.quote.reference}: "${contextData.quote.translation}"`
-    : 'QS At-Taubah (9:103): "Ambillah zakat dari sebagian harta mereka, dengan zakat itu kamu membersihkan dan menyucikan mereka."';
+  const islamicContext =
+    contextData?.success && contextData.quote
+      ? `${contextData.quote.reference}: "${contextData.quote.translation}"`
+      : 'QS At-Taubah (9:103): "Ambillah zakat dari sebagian harta mereka, dengan zakat itu kamu membersihkan dan menyucikan mereka."';
 
   // Format pesan untuk user
   const message = buildCalculationMessage(zakatBreakdown, islamicContext);

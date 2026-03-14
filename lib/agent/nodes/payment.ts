@@ -5,11 +5,20 @@
 // Transplant RUANG HATI: Loading state dengan animasi dzikir singkat
 
 import { buildAgentMessage } from "@/lib/agent/utils";
+import { parseJsonWithSchema } from "@/lib/agent/utils";
 import type { SedekahState } from "../state";
 import { createMayarInvoiceTool } from "../tools/mayar.tool";
 import { createCustomer } from "@/lib/mayar/customer";
 import { prisma } from "@/lib/prisma";
 import { formatRupiah } from "@/lib/utils";
+import { z } from "zod";
+
+const createInvoiceResultSchema = z.object({
+  success: z.boolean(),
+  paymentLink: z.string().url().optional(),
+  invoiceId: z.string().optional(),
+  error: z.string().optional(),
+});
 
 export async function paymentExecutorNode(
   state: SedekahState,
@@ -82,10 +91,13 @@ export async function paymentExecutorNode(
     description,
   });
 
-  const parsed = JSON.parse(invoiceResult);
+  const parsed = parseJsonWithSchema(invoiceResult, createInvoiceResultSchema);
 
-  if (!parsed.success) {
-    console.error("[PAYMENT_EXECUTOR] Invoice creation failed:", parsed.error);
+  if (!parsed || !parsed.success || !parsed.paymentLink || !parsed.invoiceId) {
+    console.error(
+      "[PAYMENT_EXECUTOR] Invoice creation failed:",
+      parsed?.error ?? "Invalid invoice tool response",
+    );
     return {
       messages: [
         buildAgentMessage(
