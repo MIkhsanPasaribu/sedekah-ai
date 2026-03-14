@@ -13,7 +13,8 @@ import { getDonationReflection } from "@/lib/islamic-quotes";
 export async function impactTrackerNode(
   state: SedekahState,
 ): Promise<Partial<SedekahState>> {
-  const { recommendation, paymentStatus, donorIntent } = state;
+  const { recommendation, paymentStatus, donorIntent, mayarInvoiceLink } =
+    state;
 
   if (!recommendation) {
     return {
@@ -72,7 +73,7 @@ export async function impactTrackerNode(
 
   const message = isPaid
     ? buildImpactMessage(impactReport)
-    : buildProjectedImpactMessage(impactReport);
+    : buildProjectedImpactMessage(impactReport, mayarInvoiceLink);
 
   return {
     messages: [buildAgentMessage(message, "IMPACT_TRACKER")],
@@ -136,7 +137,10 @@ function buildImpactMessage(report: ImpactReport): string {
   return lines.join("\n");
 }
 
-function buildProjectedImpactMessage(report: ImpactReport): string {
+function buildProjectedImpactMessage(
+  report: ImpactReport,
+  paymentLink: string | null,
+): string {
   const lines: string[] = [
     `✨ **Insya Allah, Inilah Dampak Donasi Anda**\n`,
     `_Setelah pembayaran dikonfirmasi, donasi Anda akan memberikan dampak berikut:_\n`,
@@ -153,6 +157,10 @@ function buildProjectedImpactMessage(report: ImpactReport): string {
   lines.push(`---`);
   lines.push(`\n🤲 ${report.reflectionMessage}`);
   lines.push(`\n📖 ${report.ayat}`);
+  if (paymentLink) {
+    lines.push(`\n🔗 **Link Pembayaran:** [Bayar Sekarang](${paymentLink})`);
+    lines.push(`\nJika tombol tidak terbuka, salin URL ini: ${paymentLink}`);
+  }
   lines.push(
     `\n_Silakan selesaikan pembayaran melalui link yang telah diberikan. Kami akan mengonfirmasi setelah pembayaran diterima._ 🤲`,
   );

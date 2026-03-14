@@ -12,6 +12,8 @@ import { AutopilotCard } from "@/components/dashboard/AutopilotCard";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { getInvoice, pickInvoiceData } from "@/lib/mayar/invoice";
+import { incrementCampaignCollected } from "@/lib/db/campaign-helpers";
 import {
   formatRupiah,
   getDailyNudge,
@@ -34,6 +36,15 @@ export default async function DashboardPage() {
 
   if (!user) {
     redirect("/login");
+  }
+
+  const currentDbUser = await prisma.user.findUnique({
+    where: { authId: user.id },
+    select: { id: true },
+  });
+
+  if (currentDbUser) {
+    await reconcilePendingInvoicesForUser(currentDbUser.id);
   }
 
   // Fetch user data
@@ -280,4 +291,67 @@ export default async function DashboardPage() {
       </div>
     </div>
   );
+}
+
+async function reconcilePendingInvoicesForUser(userId: string): Promise<void> {
+  const pending = await prisma.donation.findMany({
+    where: { userId, status: "pending", mayarInvoiceId: { not: null } },
+    select: {
+      id: true,
+      amount: true,
+      campaignId: true,
+      mayarInvoiceId: true,
+    },
+  });
+
+  if (pending.length === 0) return;
+
+  const uniqueInvoiceIds = Array.from(
+    new Set(pending.map((d) => d.mayarInvoiceId).filter(Boolean)),
+  ) as string[];
+
+  for (const invoiceId of uniqueInvoiceIds) {
+    try {
+      const invoiceRes = await getInvoice(invoiceId);
+      const invoice = pickInvoiceData(invoiceRes.data);
+      const status = invoice?.status;
+
+      if (!status || status === "unpaid") continue;
+
+      const mappedStatus =
+        status === "paid"
+          ? "paid"
+          : status === "expired"
+            ? "expired"
+            : status === "cancelled"
+              ? "failed"
+              : null;
+
+      if (!mappedStatus) continue;
+
+      const invoicePendingDonations = pending.filter(
+        (d) => d.mayarInvoiceId === invoiceId,
+      );
+      if (invoicePendingDonations.length === 0) continue;
+
+      await prisma.$transaction(async (tx) => {
+        await tx.donation.updateMany({
+          where: { userId, mayarInvoiceId: invoiceId, status: "pending" },
+          data: {
+            status: mappedStatus,
+            ...(mappedStatus === "paid" ? { paidAt: new Date() } : {}),
+          },
+        });
+
+        if (mappedStatus === "paid") {
+          await incrementCampaignCollected(invoicePendingDonations, tx);
+        }
+      });
+    } catch (error) {
+      console.error("[Dashboard] Reconcile pending invoice failed:", {
+        invoiceId,
+        error,
+      });
+    }
+  }
 }

@@ -6,7 +6,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { createInvoice } from "@/lib/mayar/invoice";
+import { pickInvoiceData } from "@/lib/mayar/invoice";
 import { directDonationSchema } from "@/lib/validations/donation";
+import { getRequiredAppBaseUrl } from "@/lib/env";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
@@ -47,44 +49,81 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Get DB user (for userId FK)
-    const dbUser = await prisma.user.findUnique({
+    // Get DB user (for userId FK), create if missing
+    let dbUser = await prisma.user.findUnique({
       where: { authId: user.id },
-      select: { id: true },
+      select: { id: true, mobile: true },
     });
 
     if (!dbUser) {
-      return NextResponse.json(
-        { error: "Data pengguna tidak ditemukan" },
-        { status: 404 },
-      );
+      const metadata = user.user_metadata as
+        | Record<string, unknown>
+        | undefined;
+      const inferredName =
+        (typeof metadata?.full_name === "string" && metadata.full_name) ||
+        (typeof metadata?.name === "string" && metadata.name) ||
+        user.email?.split("@")[0] ||
+        "Donatur";
+
+      dbUser = await prisma.user.create({
+        data: {
+          authId: user.id,
+          email: user.email ?? email,
+          name: inferredName,
+        },
+        select: { id: true, mobile: true },
+      });
     }
 
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL ?? "https://sedekah-ai.vercel.app";
+    const appUrl = getRequiredAppBaseUrl();
+    const mobile = dbUser.mobile?.trim() || "081234567890";
+    const customerRef = `DIRECT-${dbUser.id.slice(0, 8)}-${Date.now()}`;
 
     // Create Mayar invoice (ensures webhook + status polling work correctly)
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const invoiceResult = await createInvoice({
       name,
       email,
+      mobile,
       amount,
       description:
         message ??
         `Donasi untuk ${campaign.name} via SEDEKAH.AI — Semoga Allah melipatgandakan kebaikan Anda`,
       redirectUrl: `${appUrl}/success?campaign=${encodeURIComponent(campaign.name)}&amount=${amount}`,
       expiredAt: expiresAt,
+      items: [
+        {
+          quantity: 1,
+          rate: amount,
+          description:
+            message ??
+            `Donasi untuk ${campaign.name} via SEDEKAH.AI — Semoga Allah melipatgandakan kebaikan Anda`,
+        },
+      ],
+      extraData: {
+        noCustomer: customerRef,
+        idProd: campaignId,
+      },
     });
 
-    if (invoiceResult.statusCode !== 200 || !invoiceResult.data) {
+    const invoice = pickInvoiceData(invoiceResult.data);
+
+    if (invoiceResult.statusCode !== 200 || !invoice) {
       return NextResponse.json(
         { error: "Gagal membuat link pembayaran. Coba lagi." },
         { status: 502 },
       );
     }
 
-    const paymentLink = invoiceResult.data.link;
-    const mayarId = invoiceResult.data.id;
+    const paymentLink = invoice.link || invoice.paymentUrl;
+    const mayarId = invoice.id;
+
+    if (!paymentLink || !mayarId) {
+      return NextResponse.json(
+        { error: "Link pembayaran tidak valid dari gateway." },
+        { status: 502 },
+      );
+    }
 
     // Save pending Donation record
     const donation = await prisma.donation.create({

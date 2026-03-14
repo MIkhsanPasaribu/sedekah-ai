@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatRupiah } from "@/lib/utils";
+import {
+  DONATION_LIMITS,
+  validateDirectDonationForm,
+} from "@/lib/validations/donation";
 
 const PRESET_AMOUNTS = [25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000];
 
@@ -35,27 +39,22 @@ export function DonateForm({ campaign }: DonateFormProps) {
 
   function handleCustomInput(val: string): void {
     setSelectedAmount(null);
-    setCustomAmount(val);
+    setCustomAmount(val.replace(/\D/g, ""));
   }
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setError("");
 
-    if (!name.trim() || name.trim().length < 2) {
-      setError("Nama minimal 2 karakter.");
-      return;
-    }
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("Masukkan alamat email yang valid.");
-      return;
-    }
-    if (effectiveAmount < 10_000) {
-      setError("Donasi minimal Rp 10.000.");
-      return;
-    }
-    if (effectiveAmount > 100_000_000) {
-      setError("Donasi maksimal Rp 100.000.000 per transaksi.");
+    const validation = validateDirectDonationForm({
+      name: name.trim(),
+      email: email.trim(),
+      amount: effectiveAmount,
+      message: message.trim() || undefined,
+    });
+
+    if (!validation.success) {
+      setError(validation.error);
       return;
     }
 
@@ -67,9 +66,9 @@ export function DonateForm({ campaign }: DonateFormProps) {
         body: JSON.stringify({
           campaignId: campaign.id,
           amount: effectiveAmount,
-          name: name.trim(),
-          email: email.trim(),
-          message: message.trim() || undefined,
+          name: validation.data.name,
+          email: validation.data.email,
+          message: validation.data.message,
         }),
       });
 
@@ -249,7 +248,7 @@ export function DonateForm({ campaign }: DonateFormProps) {
           )}
 
           {/* Summary */}
-          {effectiveAmount >= 10_000 && (
+          {effectiveAmount >= DONATION_LIMITS.MIN_AMOUNT && (
             <div className="rounded-xl bg-brand-green-ghost px-4 py-3 flex items-center justify-between">
               <p className="text-xs text-ink-mid">Total donasi</p>
               <p className="text-xl font-bold text-brand-green-deep">
@@ -261,7 +260,7 @@ export function DonateForm({ campaign }: DonateFormProps) {
           {/* Submit */}
           <button
             type="submit"
-            disabled={loading || effectiveAmount < 10_000}
+            disabled={loading || effectiveAmount < DONATION_LIMITS.MIN_AMOUNT}
             className="w-full rounded-xl bg-brand-green-deep py-4 text-sm font-bold text-white transition-colors hover:bg-brand-green-mid disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? (
@@ -289,7 +288,7 @@ export function DonateForm({ campaign }: DonateFormProps) {
                 Memproses...
               </span>
             ) : (
-              `💚 Donasi ${effectiveAmount >= 10_000 ? formatRupiah(effectiveAmount) : "Sekarang"}`
+              `💚 Donasi ${effectiveAmount >= DONATION_LIMITS.MIN_AMOUNT ? formatRupiah(effectiveAmount) : "Sekarang"}`
             )}
           </button>
 

@@ -25,11 +25,20 @@ export interface MayarPaginatedResponse<T> {
 export interface CreateInvoiceRequest {
   name: string;
   email: string;
+  mobile: string;
   amount: number;
-  description?: string;
-  mobile?: string;
-  redirectUrl?: string;
-  expiredAt?: string;
+  description: string;
+  redirectUrl: string;
+  expiredAt: string;
+  items: Array<{
+    quantity: number;
+    rate: number;
+    description: string;
+  }>;
+  extraData: {
+    noCustomer: string;
+    idProd: string;
+  };
 }
 
 export interface MayarInvoice {
@@ -41,10 +50,17 @@ export interface MayarInvoice {
   description: string | null;
   mobile: string | null;
   link: string;
+  paymentUrl?: string;
   expiredAt: string | null;
+  transactionId?: string;
+  extraData?: {
+    noCustomer?: string;
+    idProd?: string;
+  };
   createdAt: string;
   updatedAt: string;
   transaction: MayarTransaction | null;
+  transactions?: MayarTransaction[];
 }
 
 // ---------- Payment ----------

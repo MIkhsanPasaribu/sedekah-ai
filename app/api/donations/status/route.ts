@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { getInvoice } from "@/lib/mayar/invoice";
+import { pickInvoiceData } from "@/lib/mayar/invoice";
 import { incrementCampaignCollected } from "@/lib/db/campaign-helpers";
 
 export const runtime = "nodejs";
@@ -67,7 +68,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (currentStatus === "pending") {
     try {
       const mayarInvoice = await getInvoice(invoiceId);
-      const mayarStatus = mayarInvoice.data?.status;
+      const invoiceData = pickInvoiceData(mayarInvoice.data);
+      const mayarStatus = invoiceData?.status;
 
       if (mayarStatus && mayarStatus !== "unpaid") {
         // Map Mayar status to our DonationStatus enum
@@ -85,9 +87,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             status: mappedStatus,
           };
           if (mappedStatus === "paid") {
-            updateData.paidAt = mayarInvoice.data?.transaction?.paidAt
-              ? new Date(mayarInvoice.data.transaction.paidAt)
-              : new Date();
+            const paidAtRaw =
+              invoiceData?.transaction?.paidAt ??
+              invoiceData?.transactions?.[0]?.paidAt ??
+              null;
+            updateData.paidAt = paidAtRaw ? new Date(paidAtRaw) : new Date();
           }
 
           // Update semua donations untuk invoice ini + increment campaign collectedAmount

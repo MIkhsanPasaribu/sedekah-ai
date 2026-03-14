@@ -145,10 +145,14 @@ GROQ_API_KEY=your_groq_api_key
 # Mayar Payment
 MAYAR_API_KEY=your_mayar_api_key
 MAYAR_SANDBOX=true
+MAYAR_WEBHOOK_SECRET=your_webhook_secret
 
 # LangSmith (optional)
 LANGSMITH_API_KEY=your_langsmith_key
 LANGSMITH_PROJECT=sedekah-ai
+
+# App URL
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
 ---

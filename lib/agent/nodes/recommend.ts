@@ -62,53 +62,54 @@ export async function recommendNode(
     };
   }
 
+  if (totalAmount <= 0) {
+    return {
+      messages: [
+        buildAgentMessage(
+          [
+            "Alhamdulillah, kampanye tepercaya sudah saya siapkan. ✨",
+            "",
+            "Sebelum lanjut ke pembayaran, mohon sebutkan nominal donasi Anda terlebih dahulu.",
+            "",
+            "Contoh: `Saya ingin donasi Rp 100.000` atau `Nominal saya 250 ribu`.",
+          ].join("\n"),
+          "RECOMMEND",
+        ),
+      ],
+      recommendation: null,
+    };
+  }
+
   // Buat alokasi: max 3 kampanye teratas
   const topCampaigns = trustedCampaigns.slice(0, 3);
   const allocations: AllocationItem[] = [];
 
-  if (totalAmount > 0) {
-    // Distribusi berdasarkan weighted score
-    const totalScore = topCampaigns.reduce(
-      (sum, c) => sum + (fraudScores[c.id]?.overallScore ?? c.trustScore),
-      0,
-    );
+  // Distribusi berdasarkan weighted score
+  const totalScore = topCampaigns.reduce(
+    (sum, c) => sum + (fraudScores[c.id]?.overallScore ?? c.trustScore),
+    0,
+  );
 
-    for (const campaign of topCampaigns) {
-      const score =
-        fraudScores[campaign.id]?.overallScore ?? campaign.trustScore;
-      const weight = score / totalScore;
-      const amount = Math.round(totalAmount * weight);
-      const percentage = Math.round(weight * 100);
+  for (const campaign of topCampaigns) {
+    const score = fraudScores[campaign.id]?.overallScore ?? campaign.trustScore;
+    const weight = score / totalScore;
+    const amount = Math.round(totalAmount * weight);
+    const percentage = Math.round(weight * 100);
 
-      allocations.push({
-        campaignId: campaign.id,
-        campaignName: campaign.name,
-        amount,
-        percentage,
-        reasoning: `Trust Score ${score}/100 — ${campaign.laz} (${campaign.lazVerified ? "Terverifikasi" : "Belum Terverifikasi"})`,
-        trustScore: score,
-      });
-    }
+    allocations.push({
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      amount,
+      percentage,
+      reasoning: `Trust Score ${score}/100 — ${campaign.laz} (${campaign.lazVerified ? "Terverifikasi" : "Belum Terverifikasi"})`,
+      trustScore: score,
+    });
+  }
 
-    // Sesuaikan rounding agar total tepat
-    const allocatedTotal = allocations.reduce((sum, a) => sum + a.amount, 0);
-    if (allocations.length > 0 && allocatedTotal !== totalAmount) {
-      allocations[0].amount += totalAmount - allocatedTotal;
-    }
-  } else {
-    // Untuk sedekah tanpa kalkulasi, tampilkan kampanye tanpa nominal
-    for (const campaign of topCampaigns) {
-      const score =
-        fraudScores[campaign.id]?.overallScore ?? campaign.trustScore;
-      allocations.push({
-        campaignId: campaign.id,
-        campaignName: campaign.name,
-        amount: 0,
-        percentage: 0,
-        reasoning: `Trust Score ${score}/100 — ${campaign.laz} (${campaign.lazVerified ? "Terverifikasi" : "Belum Terverifikasi"})`,
-        trustScore: score,
-      });
-    }
+  // Sesuaikan rounding agar total tepat
+  const allocatedTotal = allocations.reduce((sum, a) => sum + a.amount, 0);
+  if (allocations.length > 0 && allocatedTotal !== totalAmount) {
+    allocations[0].amount += totalAmount - allocatedTotal;
   }
 
   // Ambil Islamic context

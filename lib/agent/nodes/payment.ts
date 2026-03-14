@@ -37,6 +37,7 @@ export async function paymentExecutorNode(
           "PAYMENT_EXECUTOR",
         ),
       ],
+      recommendation: null,
     };
   }
 
@@ -84,6 +85,7 @@ export async function paymentExecutorNode(
   const parsed = JSON.parse(invoiceResult);
 
   if (!parsed.success) {
+    console.error("[PAYMENT_EXECUTOR] Invoice creation failed:", parsed.error);
     return {
       messages: [
         buildAgentMessage(

@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAutopilotProductId } from "@/lib/env";
+import { getRequiredAppBaseUrl } from "@/lib/env";
+import { pickInvoiceData } from "@/lib/mayar/invoice";
 
 /**
  * Cron-triggered endpoint — scheduled by Vercel at 07:00 WIB (00:00 UTC) daily.
@@ -24,12 +27,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Dynamically import prisma + mayar to avoid cold-start overhead in cron
     const { prisma } = await import("@/lib/prisma");
     const { createInvoice } = await import("@/lib/mayar/invoice");
-    const { getCustomerCreditBalance, spendCustomerCredit } = await import(
-      "@/lib/mayar/credits"
-    );
+    const { getCustomerCreditBalance, spendCustomerCredit } =
+      await import("@/lib/mayar/credits");
 
     const now = new Date();
-    const AUTOPILOT_PRODUCT_ID = process.env.MAYAR_AUTOPILOT_PRODUCT_ID ?? "";
+    const AUTOPILOT_PRODUCT_ID = getAutopilotProductId() ?? "";
+    const appUrl = getRequiredAppBaseUrl();
 
     // Find all active configs where nextRunAt <= now
     const configs = await prisma.autopilotConfig.findMany({
@@ -145,11 +148,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           const invoiceRes = await createInvoice({
             name: config.user.name ?? config.user.email,
             email: config.user.email,
+            mobile: "081234567890",
             amount: config.monthlyAmount,
             description: `Donasi otomatis bulanan — ${monthLabel}`,
+            redirectUrl: `${appUrl}/success`,
+            expiredAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            items: [
+              {
+                quantity: 1,
+                rate: config.monthlyAmount,
+                description: `Donasi otomatis bulanan — ${monthLabel}`,
+              },
+            ],
+            extraData: {
+              noCustomer: `AUTO-${config.user.id.slice(0, 8)}-${Date.now()}`,
+              idProd: AUTOPILOT_PRODUCT_ID || "SEDEKAH-AI-AUTOPILOT",
+            },
           });
-          invoiceId = invoiceRes.data?.id ?? null;
-          paymentLink = invoiceRes.data?.link ?? null;
+          const invoiceData = pickInvoiceData(invoiceRes.data);
+          invoiceId = invoiceData?.id ?? null;
+          paymentLink = invoiceData?.link || invoiceData?.paymentUrl || null;
           invoiceUsed++;
         }
 

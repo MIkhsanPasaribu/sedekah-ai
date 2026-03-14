@@ -43,6 +43,8 @@ interface ChatInterfaceProps {
 const POLL_INTERVAL = 5_000;
 /** Batas waktu polling sebelum timeout (ms) — 10 menit */
 const POLL_TIMEOUT = 10 * 60 * 1_000;
+/** Timeout request ke agent SSE agar UI tidak stuck */
+const AGENT_REQUEST_TIMEOUT = 45_000;
 
 export function ChatInterface({
   initialThreadId,
@@ -241,6 +243,11 @@ export function ChatInterface({
     sseAbortRef.current?.abort();
     const sseController = new AbortController();
     sseAbortRef.current = sseController;
+    let didTimeout = false;
+    const timeoutId = setTimeout(() => {
+      didTimeout = true;
+      sseController.abort();
+    }, AGENT_REQUEST_TIMEOUT);
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -346,7 +353,19 @@ export function ChatInterface({
       }
     } catch (err) {
       // Ignore AbortError (user navigated away or started new message)
-      if (err instanceof Error && err.name === "AbortError") return;
+      if (err instanceof Error && err.name === "AbortError") {
+        if (didTimeout && isMountedRef.current) {
+          const timeoutMessage: Message = {
+            id: `timeout-${Date.now()}`,
+            role: "assistant",
+            content:
+              "⏳ Permintaan sedang lebih lama dari biasanya. Silakan coba lagi sebentar, atau ulangi klik Bayar Sekarang.",
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, timeoutMessage]);
+        }
+        return;
+      }
       await reader?.cancel();
       if (isMountedRef.current) {
         const errorMessage: Message = {
@@ -358,6 +377,7 @@ export function ChatInterface({
         setMessages((prev) => [...prev, errorMessage]);
       }
     } finally {
+      clearTimeout(timeoutId);
       await reader?.cancel();
       if (isMountedRef.current) {
         setIsLoading(false);
@@ -407,6 +427,7 @@ export function ChatInterface({
     agentState.zakatBreakdown.totalKewajiban > 0;
   const showPaymentApproval =
     agentState.recommendation &&
+    agentState.recommendation.totalAmount > 0 &&
     !agentState.mayarInvoiceLink &&
     agentState.paymentStatus !== "paid";
   // Show Islamic spinner only during the payment approval-to-invoice step
@@ -415,6 +436,8 @@ export function ChatInterface({
     agentState.paymentStatus === "paid" && !agentState.impactReport;
   const showImpactReport =
     agentState.impactReport && agentState.paymentStatus === "paid";
+  const showPaymentLinkCta =
+    !!agentState.mayarInvoiceLink && agentState.paymentStatus === "pending";
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col bg-surface-warm md:h-screen">
@@ -479,6 +502,43 @@ export function ChatInterface({
               onEdit={handleEditAllocation}
               isLoading={isLoading}
             />
+          </div>
+        )}
+
+        {/* Payment Link CTA */}
+        {showPaymentLinkCta && (
+          <div className="mx-auto max-w-3xl px-4 py-2">
+            <div className="rounded-2xl border border-brand-gold-pale bg-brand-gold-ghost p-4 shadow-sm">
+              <p className="text-sm font-semibold text-ink-black">
+                🔗 Link pembayaran sudah siap
+              </p>
+              <p className="mt-1 text-xs text-ink-mid">
+                Klik tombol di bawah untuk menyelesaikan pembayaran Anda.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <a
+                  href={agentState.mayarInvoiceLink ?? undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center rounded-lg bg-brand-green-deep px-4 py-2 text-sm font-semibold text-white hover:bg-brand-green-mid"
+                >
+                  💳 Buka Halaman Pembayaran
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (agentState.mayarInvoiceLink) {
+                      navigator.clipboard
+                        .writeText(agentState.mayarInvoiceLink)
+                        .catch(() => undefined);
+                    }
+                  }}
+                  className="inline-flex items-center rounded-lg border border-ink-ghost bg-white px-4 py-2 text-sm font-medium text-ink-dark hover:bg-slate-50"
+                >
+                  Salin Link
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

@@ -2,15 +2,14 @@
 // Mayar API — Base HTTP Client (Singleton)
 // ============================================================
 
-const MAYAR_BASE_URL =
-  process.env.MAYAR_SANDBOX === "true"
-    ? "https://api.mayar.club/hl/v1"
-    : "https://api.mayar.id/hl/v1";
+import { getMayarRuntimeConfig } from "@/lib/env";
 
-const MAYAR_API_KEY = process.env.MAYAR_API_KEY ?? "";
+const { apiKey: MAYAR_API_KEY, baseUrl: MAYAR_BASE_URL } =
+  getMayarRuntimeConfig();
 
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1000;
+const REQUEST_TIMEOUT_MS = 20_000;
 
 interface MayarRequestOptions {
   method: "GET" | "POST" | "PUT" | "DELETE";
@@ -29,6 +28,7 @@ async function sleep(ms: number): Promise<void> {
  */
 export async function mayarFetch<T>(options: MayarRequestOptions): Promise<T> {
   const { method, path, body, params } = options;
+  const requestId = crypto.randomUUID();
 
   const url = new URL(`${MAYAR_BASE_URL}${path}`);
   if (params) {
@@ -40,15 +40,21 @@ export async function mayarFetch<T>(options: MayarRequestOptions): Promise<T> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const start = Date.now();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     try {
       const response = await fetch(url.toString(), {
         method,
+        signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${MAYAR_API_KEY}`,
         },
         body: body ? JSON.stringify(body) : undefined,
       });
+      clearTimeout(timeoutId);
 
       // Handle rate limiting (429)
       if (response.status === 429) {
@@ -58,7 +64,7 @@ export async function mayarFetch<T>(options: MayarRequestOptions): Promise<T> {
           : INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
 
         console.warn(
-          `[Mayar] Rate limited (429). Retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
+          `[Mayar:${requestId}] Rate limited (429). Retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
         );
         await sleep(delayMs);
         continue;
@@ -68,7 +74,7 @@ export async function mayarFetch<T>(options: MayarRequestOptions): Promise<T> {
       if (response.status >= 500) {
         const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
         console.warn(
-          `[Mayar] Server error (${response.status}). Retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
+          `[Mayar:${requestId}] Server error (${response.status}). Retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
         );
         await sleep(delayMs);
         continue;
@@ -84,17 +90,28 @@ export async function mayarFetch<T>(options: MayarRequestOptions): Promise<T> {
       }
 
       const data = (await response.json()) as T;
+      console.info(
+        `[Mayar:${requestId}] ${method} ${path} success in ${Date.now() - start}ms`,
+      );
       return data;
     } catch (error) {
+      clearTimeout(timeoutId);
       if (error instanceof MayarApiError) {
         throw error;
       }
-      lastError = error as Error;
+
+      if (error instanceof DOMException && error.name === "AbortError") {
+        lastError = new Error(
+          `Timeout ${REQUEST_TIMEOUT_MS}ms saat menghubungi Mayar`,
+        );
+      } else {
+        lastError = error as Error;
+      }
       if (attempt < MAX_RETRIES - 1) {
         const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
         console.warn(
-          `[Mayar] Network error. Retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES}):`,
-          (error as Error).message,
+          `[Mayar:${requestId}] Network error. Retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES}):`,
+          lastError.message,
         );
         await sleep(delayMs);
       }

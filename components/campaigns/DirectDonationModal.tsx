@@ -4,6 +4,10 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatRupiah } from "@/lib/utils";
 import {
+  DONATION_LIMITS,
+  validateDirectDonationForm,
+} from "@/lib/validations/donation";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -55,23 +59,22 @@ export function DirectDonationModal({
 
   function handleCustomInput(val: string): void {
     setSelectedAmount(null);
-    setCustomAmount(val);
+    setCustomAmount(val.replace(/\D/g, ""));
   }
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setError("");
 
-    if (!name.trim() || name.trim().length < 2) {
-      setError("Nama minimal 2 karakter.");
-      return;
-    }
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("Masukkan alamat email yang valid.");
-      return;
-    }
-    if (effectiveAmount < 10_000) {
-      setError("Donasi minimal Rp 10.000.");
+    const validation = validateDirectDonationForm({
+      name: name.trim(),
+      email: email.trim(),
+      amount: effectiveAmount,
+      message: message.trim() || undefined,
+    });
+
+    if (!validation.success) {
+      setError(validation.error);
       return;
     }
 
@@ -83,9 +86,9 @@ export function DirectDonationModal({
         body: JSON.stringify({
           campaignId,
           amount: effectiveAmount,
-          name: name.trim(),
-          email: email.trim(),
-          message: message.trim() || undefined,
+          name: validation.data.name,
+          email: validation.data.email,
+          message: validation.data.message,
         }),
       });
 
@@ -225,7 +228,7 @@ export function DirectDonationModal({
           {error && <p className="text-xs text-danger">{error}</p>}
 
           {/* Summary */}
-          {effectiveAmount >= 10_000 && (
+          {effectiveAmount >= DONATION_LIMITS.MIN_AMOUNT && (
             <div className="rounded-lg bg-brand-green-ghost px-3 py-2">
               <p className="text-xs text-ink-mid">Total donasi</p>
               <p className="text-lg font-bold text-brand-green-deep">
@@ -236,7 +239,7 @@ export function DirectDonationModal({
 
           <button
             type="submit"
-            disabled={loading || effectiveAmount < 10_000}
+            disabled={loading || effectiveAmount < DONATION_LIMITS.MIN_AMOUNT}
             className="w-full rounded-xl bg-brand-green-deep py-3 text-sm font-bold text-white transition-colors hover:bg-brand-green-mid disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? (

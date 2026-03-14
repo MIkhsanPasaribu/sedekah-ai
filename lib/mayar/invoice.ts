@@ -15,8 +15,8 @@ import type {
  */
 export async function createInvoice(
   request: CreateInvoiceRequest,
-): Promise<MayarApiResponse<MayarInvoice>> {
-  return mayarFetch<MayarApiResponse<MayarInvoice>>({
+): Promise<MayarApiResponse<MayarInvoice[] | MayarInvoice>> {
+  return mayarFetch<MayarApiResponse<MayarInvoice[] | MayarInvoice>>({
     method: "POST",
     path: "/invoice/create",
     body: request as unknown as Record<string, unknown>,
@@ -29,9 +29,16 @@ export async function createInvoice(
  */
 export async function getInvoice(
   invoiceId: string,
-): Promise<MayarApiResponse<MayarInvoice>> {
-  return mayarFetch<MayarApiResponse<MayarInvoice>>({
+): Promise<MayarApiResponse<MayarInvoice[] | MayarInvoice>> {
+  return mayarFetch<MayarApiResponse<MayarInvoice[] | MayarInvoice>>({
     method: "GET",
     path: `/invoice/${invoiceId}`,
   });
+}
+
+export function pickInvoiceData(
+  data: MayarInvoice[] | MayarInvoice | null | undefined,
+): MayarInvoice | null {
+  if (!data) return null;
+  return Array.isArray(data) ? (data[0] ?? null) : data;
 }

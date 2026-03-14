@@ -61,31 +61,46 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
     }
     const donorEmail: string = user.email;
-    const dbUser = await prisma.user.findUnique({
+    const metadata = user.user_metadata as Record<string, unknown> | undefined;
+    const inferredName =
+      (typeof metadata?.full_name === "string" && metadata.full_name) ||
+      (typeof metadata?.name === "string" && metadata.name) ||
+      user.email.split("@")[0];
+
+    let dbUser = await prisma.user.findUnique({
       where: { authId: user.id },
       select: { id: true, name: true },
     });
+
+    if (!dbUser) {
+      dbUser = await prisma.user.create({
+        data: {
+          authId: user.id,
+          email: user.email,
+          name: inferredName,
+        },
+        select: { id: true, name: true },
+      });
+    }
     const donorName: string = dbUser?.name ?? user.email.split("@")[0];
 
     // Upsert conversation record
     let conversation: { id: string } | null = null;
-    if (dbUser) {
-      const lastUserMsg = messages?.[messages.length - 1]?.content;
-      const title = lastUserMsg
-        ? lastUserMsg.slice(0, 60) + (lastUserMsg.length > 60 ? "..." : "")
-        : "Percakapan Baru";
+    const lastUserMsg = messages?.[messages.length - 1]?.content;
+    const title = lastUserMsg
+      ? lastUserMsg.slice(0, 60) + (lastUserMsg.length > 60 ? "..." : "")
+      : "Percakapan Baru";
 
-      conversation = await prisma.conversation.upsert({
-        where: { threadId: resolvedThreadId },
-        update: { updatedAt: new Date() },
-        create: {
-          userId: dbUser.id,
-          threadId: resolvedThreadId,
-          title,
-        },
-        select: { id: true },
-      });
-    }
+    conversation = await prisma.conversation.upsert({
+      where: { threadId: resolvedThreadId },
+      update: { updatedAt: new Date() },
+      create: {
+        userId: dbUser.id,
+        threadId: resolvedThreadId,
+        title,
+      },
+      select: { id: true },
+    });
 
     const graph = await getSedekahGraph();
 
@@ -142,7 +157,10 @@ export async function POST(req: NextRequest): Promise<Response> {
         if (recentMessages.length > 0) {
           historyContext = recentMessages
             .reverse()
-            .map((m) => `${m.role === "user" ? "Donatur" : "Amil AI"}: ${m.content.slice(0, 200)}`)
+            .map(
+              (m) =>
+                `${m.role === "user" ? "Donatur" : "Amil AI"}: ${m.content.slice(0, 200)}`,
+            )
             .join("\n");
         }
       }
@@ -203,10 +221,7 @@ export async function POST(req: NextRequest): Promise<Response> {
             }
 
             // Token-level streaming: emit each LLM token chunk
-            if (
-              eventKind === "on_chat_model_stream" &&
-              event.data?.chunk
-            ) {
+            if (eventKind === "on_chat_model_stream" && event.data?.chunk) {
               const chunk = event.data.chunk;
               const content =
                 typeof chunk.content === "string" ? chunk.content : "";

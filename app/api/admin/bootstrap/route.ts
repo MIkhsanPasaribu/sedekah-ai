@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth/admin";
 import { registerWebhook } from "@/lib/mayar/webhook";
+import { getRequiredAppBaseUrl } from "@/lib/env";
 
 export const runtime = "nodejs";
 
@@ -18,12 +19,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const appUrl =
-    (process.env.NEXT_PUBLIC_APP_URL ?? process.env.VERCEL_URL)
-      ? `https://${process.env.VERCEL_URL}`
-      : null;
-
-  if (!appUrl) {
+  let appUrl: string;
+  try {
+    appUrl = getRequiredAppBaseUrl();
+  } catch {
     return NextResponse.json(
       { error: "NEXT_PUBLIC_APP_URL tidak dikonfigurasi" },
       { status: 500 },
