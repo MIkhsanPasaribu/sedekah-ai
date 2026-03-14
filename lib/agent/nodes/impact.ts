@@ -7,7 +7,11 @@
 import { buildAgentMessage } from "@/lib/agent/utils";
 import type { SedekahState, ImpactReport, ImpactItem } from "../state";
 import { getIslamicContextTool } from "../tools/islamic-context.tool";
-import { estimateBeneficiaries, formatRupiah } from "@/lib/utils";
+import {
+  estimateBeneficiaries,
+  formatRupiah,
+  resolveImpactCategory,
+} from "@/lib/utils";
 import { getDonationReflection } from "@/lib/islamic-quotes";
 
 export async function impactTrackerNode(
@@ -31,12 +35,17 @@ export async function impactTrackerNode(
 
   // Build category lookup from state campaigns
   const campaignCategoryMap = new Map(
-    (state.campaigns ?? []).map((c) => [c.id, c.category ?? ""]),
+    (state.campaigns ?? []).map((c) => [
+      c.id,
+      resolveImpactCategory(c.category),
+    ]),
   );
 
   // Generate impact report berdasarkan alokasi (projected atau confirmed)
   const items: ImpactItem[] = recommendation.allocations.map((alloc) => {
-    const category = campaignCategoryMap.get(alloc.campaignId) ?? "";
+    const category = resolveImpactCategory(
+      campaignCategoryMap.get(alloc.campaignId),
+    );
     const beneficiaries = estimateBeneficiaries(alloc.amount, category);
 
     return {

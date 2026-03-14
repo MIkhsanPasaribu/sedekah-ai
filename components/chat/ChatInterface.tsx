@@ -39,12 +39,26 @@ interface ChatInterfaceProps {
   onThreadChange?: (threadId: string) => void;
 }
 
+function createInitialAgentState(): AgentState {
+  return {
+    donorIntent: null,
+    zakatBreakdown: null,
+    recommendation: null,
+    mayarInvoiceLink: null,
+    paymentStatus: null,
+    impactReport: null,
+    invoiceId: null,
+  };
+}
+
 /** Interval polling status pembayaran (ms) */
 const POLL_INTERVAL = 5_000;
 /** Batas waktu polling sebelum timeout (ms) — 10 menit */
 const POLL_TIMEOUT = 10 * 60 * 1_000;
 /** Timeout request ke agent SSE agar UI tidak stuck */
-const AGENT_REQUEST_TIMEOUT = 45_000;
+const AGENT_INITIAL_RESPONSE_TIMEOUT = 45_000;
+/** Idle timeout stream SSE setelah response berjalan */
+const AGENT_STREAM_IDLE_TIMEOUT = 90_000;
 
 export function ChatInterface({
   initialThreadId,
@@ -55,15 +69,9 @@ export function ChatInterface({
   const [threadId, setThreadId] = useState<string | null>(
     initialThreadId ?? null,
   );
-  const [agentState, setAgentState] = useState<AgentState>({
-    donorIntent: null,
-    zakatBreakdown: null,
-    recommendation: null,
-    mayarInvoiceLink: null,
-    paymentStatus: null,
-    impactReport: null,
-    invoiceId: null,
-  });
+  const [agentState, setAgentState] = useState<AgentState>(
+    createInitialAgentState,
+  );
   const [showMuhasabah, setShowMuhasabah] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [nodeProgress, setNodeProgress] = useState<string | null>(null);
@@ -95,9 +103,22 @@ export function ChatInterface({
     scrollToBottom();
   }, [messages, streamingContent, scrollToBottom]);
 
+  // Keep local thread state in sync with route query changes.
+  useEffect(() => {
+    setThreadId(initialThreadId ?? null);
+  }, [initialThreadId]);
+
   // ------ Load Conversation History ------
   useEffect(() => {
-    if (!initialThreadId) return;
+    if (!initialThreadId) {
+      historyAbortRef.current?.abort();
+      setMessages([]);
+      setAgentState(createInitialAgentState());
+      setNodeProgress(null);
+      setStreamingContent("");
+      setIsLoadingHistory(false);
+      return;
+    }
 
     async function loadHistory() {
       historyAbortRef.current?.abort();
@@ -105,6 +126,8 @@ export function ChatInterface({
       historyAbortRef.current = controller;
 
       setIsLoadingHistory(true);
+      setMessages([]);
+      setAgentState(createInitialAgentState());
       try {
         const res = await fetch(
           `/api/conversations/${encodeURIComponent(initialThreadId!)}/messages`,
@@ -244,10 +267,36 @@ export function ChatInterface({
     const sseController = new AbortController();
     sseAbortRef.current = sseController;
     let didTimeout = false;
-    const timeoutId = setTimeout(() => {
-      didTimeout = true;
-      sseController.abort();
-    }, AGENT_REQUEST_TIMEOUT);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const setRequestTimeout = (duration: number): void => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      timeoutId = setTimeout(() => {
+        didTimeout = true;
+        if (!sseController.signal.aborted) {
+          sseController.abort();
+        }
+      }, duration);
+    };
+
+    const clearRequestTimeout = (): void => {
+      if (!timeoutId) return;
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    };
+
+    const safeCancelReader = async (): Promise<void> => {
+      if (!reader) return;
+      try {
+        await reader.cancel();
+      } catch {
+        // Ignore stream cancellation errors on aborted bodies.
+      }
+    };
+
+    setRequestTimeout(AGENT_INITIAL_RESPONSE_TIMEOUT);
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -278,6 +327,7 @@ export function ChatInterface({
       });
 
       if (!response.ok || !response.body) {
+        clearRequestTimeout();
         // Fallback: try parsing as JSON error
         const errData = await response.json().catch(() => null);
         const errorMessage: Message = {
@@ -293,12 +343,14 @@ export function ChatInterface({
 
       // Parse SSE stream
       reader = response.body.getReader();
+      setRequestTimeout(AGENT_STREAM_IDLE_TIMEOUT);
       const decoder = new TextDecoder();
       let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        setRequestTimeout(AGENT_STREAM_IDLE_TIMEOUT);
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
@@ -366,7 +418,7 @@ export function ChatInterface({
         }
         return;
       }
-      await reader?.cancel();
+      await safeCancelReader();
       if (isMountedRef.current) {
         const errorMessage: Message = {
           id: `error-${Date.now()}`,
@@ -377,8 +429,8 @@ export function ChatInterface({
         setMessages((prev) => [...prev, errorMessage]);
       }
     } finally {
-      clearTimeout(timeoutId);
-      await reader?.cancel();
+      clearRequestTimeout();
+      await safeCancelReader();
       if (isMountedRef.current) {
         setIsLoading(false);
         setNodeProgress(null);
@@ -388,37 +440,12 @@ export function ChatInterface({
 
   function handleApprovePayment(): void {
     // Resume graph dari interrupt() dengan aksi "approve"
-    sendMessage("Bayar sekarang", { action: "approve" });
+    void sendMessage("Bayar sekarang", { action: "approve" });
   }
 
   function handleEditAllocation(): void {
-    // Reset dan buat thread baru untuk konverasi baru
-    setThreadId(null);
-    setAgentState({
-      donorIntent: null,
-      zakatBreakdown: null,
-      recommendation: null,
-      mayarInvoiceLink: null,
-      paymentStatus: null,
-      impactReport: null,
-      invoiceId: null,
-    });
-    sendMessage("Saya ingin mengubah alokasi donasi");
-  }
-
-  /** Reset chat untuk memulai percakapan baru */
-  function startNewChat(): void {
-    setThreadId(null);
-    setMessages([]);
-    setAgentState({
-      donorIntent: null,
-      zakatBreakdown: null,
-      recommendation: null,
-      mayarInvoiceLink: null,
-      paymentStatus: null,
-      impactReport: null,
-      invoiceId: null,
-    });
+    // Resume graph dari interrupt() dengan aksi "edit"
+    void sendMessage("Ubah alokasi", { action: "edit" });
   }
 
   const showQuickActions = messages.length === 0 && !isLoadingHistory;

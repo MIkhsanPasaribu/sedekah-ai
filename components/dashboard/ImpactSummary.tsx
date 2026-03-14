@@ -1,4 +1,8 @@
-import { formatRupiah, getCategoryEmoji } from "@/lib/utils";
+import {
+  formatRupiah,
+  getCategoryEmoji,
+  getCampaignCategoryLabel,
+} from "@/lib/utils";
 
 interface ImpactSummaryProps {
   totalDonated: number;
@@ -57,7 +61,8 @@ export function ImpactSummary({
             <div key={cat.name}>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-medium text-ink-dark">
-                  {getCategoryEmoji(cat.name)} {cat.name}
+                  {getCategoryEmoji(cat.name)}{" "}
+                  {getCampaignCategoryLabel(cat.name)}
                 </span>
                 <span className="text-sm font-bold text-brand-green-deep">
                   {formatRupiah(cat.amount)}

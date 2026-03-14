@@ -197,6 +197,12 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
+## 🧪 Quality Assurance
+
+- QA Test Cases: [docs/QA-TEST-CASE-PLAYBOOK.md](docs/QA-TEST-CASE-PLAYBOOK.md)
+
+---
+
 <p align="center">
   Dibuat dengan 💚 untuk umat — <strong>SEDEKAH.AI</strong> © 2026
 </p>

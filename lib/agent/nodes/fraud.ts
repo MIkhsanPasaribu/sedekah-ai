@@ -8,6 +8,8 @@ import type { SedekahState, FraudScore } from "../state";
 import { analyzeFraudTool } from "../tools/fraud.tool";
 import { getTrustScoreLabel } from "@/lib/utils";
 
+const FRAUD_ANALYSIS_TOP_N = 8;
+
 export async function fraudDetectorNode(
   state: SedekahState,
 ): Promise<Partial<SedekahState>> {
@@ -25,9 +27,31 @@ export async function fraudDetectorNode(
     };
   }
 
-  // Analyze fraud untuk semua kampanye
+  // Keep latency predictable by analyzing only the most relevant campaigns.
+  const prioritizedCampaigns = [...campaigns].sort((a, b) => {
+    const unmetRatioA =
+      (a.targetAmount - a.collectedAmount) / Math.max(a.targetAmount, 1);
+    const unmetRatioB =
+      (b.targetAmount - b.collectedAmount) / Math.max(b.targetAmount, 1);
+
+    const relevanceA = a.trustScore * 0.7 + unmetRatioA * 30;
+    const relevanceB = b.trustScore * 0.7 + unmetRatioB * 30;
+
+    return relevanceB - relevanceA;
+  });
+
+  const campaignsForAnalysis = prioritizedCampaigns.slice(
+    0,
+    FRAUD_ANALYSIS_TOP_N,
+  );
+  const skippedCount = Math.max(
+    0,
+    campaigns.length - campaignsForAnalysis.length,
+  );
+
+  // Analyze fraud untuk top-N kampanye paling relevan
   const fraudResult = await analyzeFraudTool.invoke({
-    campaigns: campaigns.map((c) => ({
+    campaigns: campaignsForAnalysis.map((c) => ({
       id: c.id,
       name: c.name,
       description: c.description,
@@ -47,8 +71,17 @@ export async function fraudDetectorNode(
 
   // Build summary message
   const lines: string[] = [`🛡️ **Analisis Fraud Shield AI**\n`];
+  lines.push(
+    `Menganalisis **${campaignsForAnalysis.length}** kampanye paling relevan untuk menjaga kecepatan respons.`,
+  );
+  if (skippedCount > 0) {
+    lines.push(
+      `Sebanyak **${skippedCount}** kampanye lainnya akan tetap dipertimbangkan pada tahap rekomendasi menggunakan baseline trust score.`,
+    );
+  }
+  lines.push("");
 
-  const sortedCampaigns = campaigns
+  const sortedCampaigns = campaignsForAnalysis
     .map((c) => ({
       ...c,
       score: fraudScores[c.id]?.overallScore ?? c.trustScore,

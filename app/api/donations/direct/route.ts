@@ -9,6 +9,7 @@ import { createInvoice } from "@/lib/mayar/invoice";
 import { pickInvoiceData } from "@/lib/mayar/invoice";
 import { directDonationSchema } from "@/lib/validations/donation";
 import { getRequiredAppBaseUrl } from "@/lib/env";
+import { inferUserName } from "@/lib/auth/infer-user-name";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
@@ -56,14 +57,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
 
     if (!dbUser) {
-      const metadata = user.user_metadata as
-        | Record<string, unknown>
-        | undefined;
-      const inferredName =
-        (typeof metadata?.full_name === "string" && metadata.full_name) ||
-        (typeof metadata?.name === "string" && metadata.name) ||
-        user.email?.split("@")[0] ||
-        "Donatur";
+      const inferredName = inferUserName(user);
 
       dbUser = await prisma.user.create({
         data: {

@@ -76,6 +76,7 @@ export function AppSidebar({ userName, userEmail, userRole }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const activeThreadId = searchParams.get("thread");
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -91,7 +92,7 @@ export function AppSidebar({ userName, userEmail, userRole }: AppSidebarProps) {
       }
     }
     load();
-  }, [pathname]);
+  }, [pathname, activeThreadId]);
 
   const handleDelete = useCallback(
     async (threadId: string, e: React.MouseEvent) => {
@@ -237,11 +238,7 @@ export function AppSidebar({ userName, userEmail, userRole }: AppSidebarProps) {
                 {conversations.map((conv) => {
                   const threadUrl = `/chat?thread=${encodeURIComponent(conv.threadId)}`;
                   const isActive =
-                    pathname === "/chat" &&
-                    typeof window !== "undefined" &&
-                    new URLSearchParams(window.location.search).get(
-                      "thread",
-                    ) === conv.threadId;
+                    pathname === "/chat" && activeThreadId === conv.threadId;
                   return (
                     <SidebarMenuItem key={conv.threadId} className="group/conv">
                       <SidebarMenuButton

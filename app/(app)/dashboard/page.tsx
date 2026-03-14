@@ -18,6 +18,7 @@ import {
   formatRupiah,
   getDailyNudge,
   estimateBeneficiaries,
+  resolveImpactCategory,
 } from "@/lib/utils";
 import { generateAiNudge } from "@/lib/nudge";
 import { FraudAlertNotification } from "@/components/dashboard/FraudAlertNotification";
@@ -54,7 +55,7 @@ export default async function DashboardPage() {
       donations: {
         orderBy: { createdAt: "desc" },
         take: 20,
-        include: { campaign: { select: { name: true } } },
+        include: { campaign: { select: { name: true, category: true } } },
       },
       givingJourney: true,
     },
@@ -128,9 +129,9 @@ export default async function DashboardPage() {
   // Impact data by category
   const categoryMap = new Map<string, { amount: number; count: number }>();
   for (const d of paidDonations) {
-    const type = d.type;
-    const existing = categoryMap.get(type) ?? { amount: 0, count: 0 };
-    categoryMap.set(type, {
+    const category = resolveImpactCategory(d.campaign?.category);
+    const existing = categoryMap.get(category) ?? { amount: 0, count: 0 };
+    categoryMap.set(category, {
       amount: existing.amount + d.amount,
       count: existing.count + 1,
     });
@@ -159,7 +160,7 @@ export default async function DashboardPage() {
         id: string;
         amount: number;
         type: string;
-        campaign: { name: string } | null;
+        campaign: { name: string; category: string } | null;
         status: string;
         createdAt: Date;
         islamicContext: string | null;

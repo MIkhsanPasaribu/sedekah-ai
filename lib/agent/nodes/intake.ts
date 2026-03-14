@@ -15,12 +15,50 @@ import {
   SystemMessage,
 } from "@langchain/core/messages";
 import { buildAgentMessage } from "@/lib/agent/utils";
+import { sanitizeModelOutput } from "@/lib/agent/utils";
 import { z } from "zod";
 import type { SedekahState } from "../state";
 
+function detectDonationIntent(text: string): SedekahState["donorIntent"] {
+  const normalized = text.toLowerCase();
+
+  if (/(fitrah|zakat\s*fitrah)/i.test(normalized)) return "zakat_fitrah";
+  if (/(zakat\s*mal|zakat)/i.test(normalized)) return "zakat_mal";
+  if (/(wakaf)/i.test(normalized)) return "wakaf";
+  if (/(infaq|infak)/i.test(normalized)) return "infaq";
+  if (/(bencana|banjir|gempa|longsor|darurat)/i.test(normalized))
+    return "bencana";
+  if (/(sedekah|sedeqah|donasi|amal)/i.test(normalized)) return "sedekah";
+
+  return null;
+}
+
+function parseDonationAmount(text: string): number | null {
+  const normalized = text
+    .toLowerCase()
+    .replace(/rp\.?/g, "")
+    .replace(/\./g, "")
+    .replace(/,/g, ".")
+    .trim();
+
+  // Match patterns like: 100 ribu, 1.5 juta, 250000, 100k
+  const match = normalized.match(/(\d+(?:\.\d+)?)\s*(juta|jt|ribu|rb|k)?/i);
+  if (!match) return null;
+
+  const base = Number(match[1]);
+  if (!Number.isFinite(base) || base <= 0) return null;
+
+  const unit = (match[2] ?? "").toLowerCase();
+  if (unit === "juta" || unit === "jt") return Math.round(base * 1_000_000);
+  if (unit === "ribu" || unit === "rb" || unit === "k")
+    return Math.round(base * 1_000);
+
+  return Math.round(base);
+}
+
 // ── LLM instances ────────────────────────────────────────────
 const conversationalLlm = new ChatGroq({
-  model: "llama-3.3-70b-versatile",
+  model: "qwen/qwen3-32b",
   temperature: 0.7,
   apiKey: process.env.GROQ_API_KEY,
 });
@@ -81,7 +119,7 @@ const intakeExtractionSchema = z.object({
 });
 
 const extractionLlm = new ChatGroq({
-  model: "llama-3.3-70b-versatile",
+  model: "qwen/qwen3-32b",
   temperature: 0,
   apiKey: process.env.GROQ_API_KEY,
 }).withStructuredOutput(intakeExtractionSchema);
@@ -112,6 +150,8 @@ PENTING:
 - Jika user sudah menyebutkan data keuangan, langsung proses
 - Jika user hanya menyebutkan niat sedekah (tanpa zakat), tidak perlu data keuangan detail
 - Jika user menyebutkan nominal donasi (misal "100 ribu", "Rp 500.000", "1 juta"), konfirmasi nominalnya
+- JANGAN pernah memberikan detail cara bayar manual seperti transfer bank, nomor rekening, QRIS, e-wallet, atau tautan contoh.
+- Pembayaran hanya boleh diarahkan ke link resmi yang dibuat sistem setelah tahap rekomendasi + konfirmasi.
 - Selalu akhiri dengan pertanyaan lanjutan jika data belum lengkap
 
 Berikan respons natural dalam Bahasa Indonesia. Jangan tampilkan JSON atau data teknis apapun kepada user.`;
@@ -163,13 +203,16 @@ export async function intakeNode(
 
   const cleanContent =
     typeof conversationalResponse.content === "string"
-      ? conversationalResponse.content.trim()
+      ? sanitizeModelOutput(conversationalResponse.content)
       : "";
 
   // Merge extracted data onto existing state (prefer new values when non-null)
   let donorIntent = state.donorIntent;
   let userFinancialData = state.userFinancialData;
   let customAmount = state.customAmount;
+  const conversationText = messages
+    .map((m) => (typeof m.content === "string" ? m.content : ""))
+    .join("\n");
 
   if (extracted) {
     if (extracted.donorIntent) donorIntent = extracted.donorIntent;
@@ -187,6 +230,31 @@ export async function intakeNode(
         jumlahJiwa: extracted.jumlahJiwa ?? 0,
       };
     }
+  }
+
+  // Deterministic fallbacks when structured extraction misses after model variance.
+  if (!donorIntent) {
+    donorIntent = detectDonationIntent(conversationText);
+  }
+
+  if (!customAmount) {
+    customAmount = parseDonationAmount(conversationText);
+  }
+
+  if (
+    !userFinancialData &&
+    donorIntent &&
+    ["sedekah", "infaq", "wakaf", "bencana"].includes(donorIntent)
+  ) {
+    userFinancialData = {
+      penghasilan: 0,
+      tabungan: 0,
+      emas: 0,
+      saham: 0,
+      crypto: 0,
+      hutang: 0,
+      jumlahJiwa: 0,
+    };
   }
 
   return {

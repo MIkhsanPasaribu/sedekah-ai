@@ -9,6 +9,9 @@ import { getSedekahGraph } from "@/lib/agent/graph";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimitPersistent } from "@/lib/rate-limiter";
+import { inferUserName } from "@/lib/auth/infer-user-name";
+import type { Prisma } from "@/generated/prisma/client";
+import { sanitizeModelOutput } from "@/lib/agent/utils";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -61,11 +64,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
     }
     const donorEmail: string = user.email;
-    const metadata = user.user_metadata as Record<string, unknown> | undefined;
-    const inferredName =
-      (typeof metadata?.full_name === "string" && metadata.full_name) ||
-      (typeof metadata?.name === "string" && metadata.name) ||
-      user.email.split("@")[0];
+    const inferredName = inferUserName(user, user.email.split("@")[0]);
 
     let dbUser = await prisma.user.findUnique({
       where: { authId: user.id },
@@ -82,25 +81,81 @@ export async function POST(req: NextRequest): Promise<Response> {
         select: { id: true, name: true },
       });
     }
+    const dbUserId = dbUser?.id;
+    if (!dbUserId) {
+      return NextResponse.json(
+        { error: "Gagal memproses akun pengguna. Silakan coba lagi." },
+        { status: 500 },
+      );
+    }
     const donorName: string = dbUser?.name ?? user.email.split("@")[0];
 
     // Upsert conversation record
-    let conversation: { id: string } | null = null;
+    let conversationId: string | null = null;
     const lastUserMsg = messages?.[messages.length - 1]?.content;
     const title = lastUserMsg
       ? lastUserMsg.slice(0, 60) + (lastUserMsg.length > 60 ? "..." : "")
       : "Percakapan Baru";
 
-    conversation = await prisma.conversation.upsert({
-      where: { threadId: resolvedThreadId },
-      update: { updatedAt: new Date() },
-      create: {
-        userId: dbUser.id,
-        threadId: resolvedThreadId,
-        title,
-      },
-      select: { id: true },
-    });
+    async function ensureConversationId(): Promise<string> {
+      const conversation = await prisma.conversation.upsert({
+        where: { threadId: resolvedThreadId },
+        update: { updatedAt: new Date() },
+        create: {
+          userId: dbUserId,
+          threadId: resolvedThreadId,
+          title,
+        },
+        select: { id: true },
+      });
+
+      conversationId = conversation.id;
+      return conversation.id;
+    }
+
+    async function createMessageSafely(data: {
+      role: "user" | "assistant" | "system";
+      content: string;
+      metadata?: Prisma.InputJsonValue;
+    }): Promise<void> {
+      if (!conversationId) {
+        conversationId = await ensureConversationId();
+      }
+
+      try {
+        await prisma.message.create({
+          data: {
+            conversationId,
+            role: data.role,
+            content: data.content,
+            metadata: data.metadata,
+          },
+        });
+      } catch (error) {
+        const code =
+          typeof error === "object" && error !== null && "code" in error
+            ? String((error as { code?: unknown }).code)
+            : "";
+
+        // Conversation may be deleted while stream is running. Recreate and retry once.
+        if (code === "P2003") {
+          const recoveredConversationId = await ensureConversationId();
+          await prisma.message.create({
+            data: {
+              conversationId: recoveredConversationId,
+              role: data.role,
+              content: data.content,
+              metadata: data.metadata,
+            },
+          });
+          return;
+        }
+
+        throw error;
+      }
+    }
+
+    conversationId = await ensureConversationId();
 
     const graph = await getSedekahGraph();
 
@@ -108,13 +163,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let graphInput: any;
     if (action === "approve" || action === "edit") {
-      if (conversation) {
-        await prisma.message.create({
-          data: {
-            conversationId: conversation.id,
-            role: "user",
-            content: action === "approve" ? "Bayar sekarang" : "Ubah alokasi",
-          },
+      if (conversationId) {
+        await createMessageSafely({
+          role: "user",
+          content: action === "approve" ? "Bayar sekarang" : "Ubah alokasi",
         });
       }
       graphInput = new Command({ resume: action });
@@ -132,22 +184,19 @@ export async function POST(req: NextRequest): Promise<Response> {
           { status: 400 },
         );
       }
-      if (conversation) {
-        await prisma.message.create({
-          data: {
-            conversationId: conversation.id,
-            role: "user",
-            content: lastMessage.content,
-          },
+      if (conversationId) {
+        await createMessageSafely({
+          role: "user",
+          content: lastMessage.content,
         });
       }
 
       // --- Conversation History Memory (#6) ---
       // Load recent messages from DB for multi-turn awareness
       let historyContext: string | null = null;
-      if (conversation) {
+      if (conversationId) {
         const recentMessages = await prisma.message.findMany({
-          where: { conversationId: conversation.id },
+          where: { conversationId },
           orderBy: { createdAt: "desc" },
           take: 6, // 5 previous + the one we just saved
           skip: 1, // Skip the one we just created
@@ -186,16 +235,36 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const stream = new ReadableStream({
       async start(controller) {
-        function send(event: string, data: unknown): void {
-          controller.enqueue(
-            encoder.encode(
-              `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
-            ),
-          );
+        let isControllerClosed = false;
+
+        function send(event: string, data: unknown): boolean {
+          if (isControllerClosed) return false;
+
+          try {
+            controller.enqueue(
+              encoder.encode(
+                `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
+              ),
+            );
+            return true;
+          } catch (error) {
+            // Happens when client disconnects or stream is already closed.
+            if (
+              error instanceof Error &&
+              (error.message.includes("Controller is already closed") ||
+                error.message.includes("Invalid state"))
+            ) {
+              isControllerClosed = true;
+              return false;
+            }
+            throw error;
+          }
         }
 
         try {
-          send("thread", { threadId: resolvedThreadId });
+          if (!send("thread", { threadId: resolvedThreadId })) {
+            return;
+          }
 
           // Use streamEvents for token-level streaming —
           // this gives us both node progress AND individual LLM tokens
@@ -205,9 +274,12 @@ export async function POST(req: NextRequest): Promise<Response> {
           });
 
           let currentNode = "";
-          const tokenBuffer: string[] = [];
 
           for await (const event of eventStream) {
+            if (isControllerClosed) {
+              break;
+            }
+
             const eventKind: string = event.event;
 
             // Track which node is currently executing
@@ -216,20 +288,22 @@ export async function POST(req: NextRequest): Promise<Response> {
               if (NODE_LABELS[nodeName]) {
                 currentNode = nodeName;
                 const label = NODE_LABELS[nodeName];
-                send("node", { node: nodeName, label });
+                if (!send("node", { node: nodeName, label })) {
+                  break;
+                }
               }
             }
 
             // Token-level streaming: emit each LLM token chunk
             if (eventKind === "on_chat_model_stream" && event.data?.chunk) {
-              const chunk = event.data.chunk;
-              const content =
-                typeof chunk.content === "string" ? chunk.content : "";
-              if (content) {
-                tokenBuffer.push(content);
-                send("token", { content, node: currentNode });
-              }
+              // Intentionally suppress raw token streaming to avoid exposing
+              // model reasoning traces like <think> blocks in the UI.
+              continue;
             }
+          }
+
+          if (isControllerClosed) {
+            return;
           }
 
           // Get final state and check for interrupts
@@ -248,12 +322,13 @@ export async function POST(req: NextRequest): Promise<Response> {
           );
           const lastAiMessage = aiMessages[aiMessages.length - 1];
 
-          const responseContent =
+          const responseContentRaw =
             typeof lastAiMessage?.content === "string"
               ? lastAiMessage.content
               : needsApproval
                 ? "Berikut rekomendasi donasi Anda. Silakan konfirmasi untuk melanjutkan pembayaran."
                 : "Maaf, terjadi kesalahan. Silakan coba lagi.";
+          const responseContent = sanitizeModelOutput(responseContentRaw);
 
           const stateSnapshot = {
             donorIntent: finalState.donorIntent ?? null,
@@ -266,25 +341,26 @@ export async function POST(req: NextRequest): Promise<Response> {
           };
 
           // Save assistant message to DB
-          if (conversation) {
-            await prisma.message.create({
-              data: {
-                conversationId: conversation.id,
-                role: "assistant",
-                content: responseContent,
-                metadata: stateSnapshot,
-              },
+          if (conversationId) {
+            await createMessageSafely({
+              role: "assistant",
+              content: responseContent,
+              metadata: stateSnapshot as Prisma.InputJsonValue,
             });
           }
 
           // Send final result
-          send("result", {
-            success: true,
-            threadId: resolvedThreadId,
-            needsApproval,
-            message: responseContent,
-            state: stateSnapshot,
-          });
+          if (
+            !send("result", {
+              success: true,
+              threadId: resolvedThreadId,
+              needsApproval,
+              message: responseContent,
+              state: stateSnapshot,
+            })
+          ) {
+            return;
+          }
 
           send("done", {});
         } catch (error) {
@@ -295,7 +371,14 @@ export async function POST(req: NextRequest): Promise<Response> {
               : "Maaf, terjadi kendala teknis. Silakan coba beberapa saat lagi. 🤲";
           send("error", { error: message });
         } finally {
-          controller.close();
+          if (!isControllerClosed) {
+            try {
+              controller.close();
+            } catch {
+              // Ignore close race when stream was already terminated.
+            }
+            isControllerClosed = true;
+          }
         }
       },
     });

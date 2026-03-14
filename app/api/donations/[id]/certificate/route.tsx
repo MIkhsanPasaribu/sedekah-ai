@@ -5,12 +5,25 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { ImageResponse } from "next/og";
-import { ChatGroq } from "@langchain/groq";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
+}
+
+function sanitizeForOg(input: string): string {
+  return input
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7E]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeOgQuote(input: string): string {
+  const cleaned = sanitizeForOg(input);
+  if (!cleaned) return "";
+  return cleaned.length > 260 ? `${cleaned.slice(0, 257)}...` : cleaned;
 }
 
 function formatRupiahSimple(amount: number): string {
@@ -68,39 +81,19 @@ export async function GET(
     );
   }
 
-  const donorName = donation.user?.name ?? "Donatur SEDEKAH.AI";
-  const campaignName = donation.campaign?.name ?? "Donasi Umum";
+  const donorName = sanitizeForOg(donation.user?.name ?? "Donatur SEDEKAH.AI");
+  const campaignName = sanitizeForOg(donation.campaign?.name ?? "Donasi Umum");
   const amount = formatRupiahSimple(donation.amount);
   const date = formatDateSimple(donation.createdAt);
   const typeLabel = donation.type
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
-  // AI-personalized doa — fallback to QS 2:261 if Groq unavailable
-  let islamicDoa =
-    '"Perumpamaan orang yang menginfakkan hartanya di jalan Allah seperti sebutir biji yang menumbuhkan tujuh tangkai, pada setiap tangkai ada seratus biji." — QS 2:261';
-  try {
-    const llm = new ChatGroq({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.7,
-      apiKey: process.env.GROQ_API_KEY,
-    });
-    const res = await llm.invoke([
-      {
-        role: "system",
-        content:
-          "Kamu adalah cendekiawan Islam. Berikan SATU ayat Al-Qur'an atau hadits dalam Bahasa Indonesia (terjemahkan) yang relevan dengan donasi ini. Format: tanda kutip isi, diakhiri tanda — dan referensi singkat. Maksimal 2 kalimat. Jangan ada kata lain.",
-      },
-      {
-        role: "user",
-        content: `Donatur: ${donorName}, jenis: ${typeLabel}, kampanye: ${campaignName}, nominal: ${amount}`,
-      },
-    ]);
-    const text = String(res.content).trim();
-    if (text.length > 10 && text.length < 300) islamicDoa = text;
-  } catch {
-    // Fallback to hardcoded doa
-  }
+  // Keep OG generation deterministic and fast to avoid runtime failures.
+  const islamicDoa = normalizeOgQuote(
+    donation.islamicContext ??
+      '"Perumpamaan orang yang menginfakkan hartanya di jalan Allah seperti sebutir biji yang menumbuhkan tujuh tangkai, pada setiap tangkai ada seratus biji." -- QS 2:261',
+  );
 
   return new ImageResponse(
     <div
@@ -149,10 +142,12 @@ export async function GET(
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: "24px",
+            fontSize: "18px",
+            fontWeight: "bold",
+            color: "#1B4332",
           }}
         >
-          🕌
+          SAI
         </div>
         <div style={{ display: "flex", flexDirection: "column" }}>
           <span
@@ -175,6 +170,8 @@ export async function GET(
 
       <div
         style={{
+          display: "flex",
+          justifyContent: "center",
           color: "#D8F3DC",
           fontSize: "14px",
           letterSpacing: "3px",
@@ -185,13 +182,23 @@ export async function GET(
       </div>
 
       {/* Dot separator */}
-      <div style={{ color: "#C9A227", fontSize: "20px", marginBottom: "16px" }}>
-        ✦ ✦ ✦
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          color: "#C9A227",
+          fontSize: "18px",
+          marginBottom: "16px",
+        }}
+      >
+        ---
       </div>
 
       {/* Donor Name */}
       <div
         style={{
+          display: "flex",
+          justifyContent: "center",
           color: "#FFFFFF",
           fontSize: "34px",
           fontWeight: "bold",
@@ -201,13 +208,24 @@ export async function GET(
       >
         {donorName}
       </div>
-      <div style={{ color: "#74C69D", fontSize: "14px", marginBottom: "20px" }}>
-        telah menunaikan {typeLabel}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          color: "#74C69D",
+          fontSize: "14px",
+          marginBottom: "20px",
+        }}
+      >
+        {`telah menunaikan ${typeLabel}`}
       </div>
 
       {/* Amount */}
       <div
         style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
           background: "rgba(255,255,255,0.12)",
           borderRadius: "16px",
           padding: "16px 40px",
@@ -225,6 +243,9 @@ export async function GET(
       {/* Campaign */}
       <div
         style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "4px",
           color: "#D8F3DC",
           fontSize: "14px",
           textAlign: "center",
@@ -232,20 +253,30 @@ export async function GET(
           marginBottom: "6px",
         }}
       >
-        Disalurkan untuk:{" "}
+        <span>Disalurkan untuk:</span>
         <span style={{ color: "#FFFFFF", fontWeight: "bold" }}>
           {campaignName}
         </span>
       </div>
 
       {/* Date */}
-      <div style={{ color: "#74C69D", fontSize: "12px", marginBottom: "20px" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          color: "#74C69D",
+          fontSize: "12px",
+          marginBottom: "20px",
+        }}
+      >
         {date}
       </div>
 
       {/* Doa / Ayat (AI-personalized) */}
       <div
         style={{
+          display: "flex",
+          justifyContent: "center",
           color: "#C9A227",
           fontSize: "12px",
           fontStyle: "italic",

@@ -141,6 +141,15 @@ const BENEFICIARY_RATES: Record<string, number> = {
   pendidikan: 250_000,
 };
 const DEFAULT_BENEFICIARY_RATE = 50_000;
+const KNOWN_IMPACT_CATEGORIES = new Set(Object.keys(BENEFICIARY_RATES));
+
+export function resolveImpactCategory(
+  category: string | null | undefined,
+): string {
+  const normalized = (category ?? "").trim().toLowerCase();
+  if (!normalized) return "umum";
+  return KNOWN_IMPACT_CATEGORIES.has(normalized) ? normalized : "umum";
+}
 
 /**
  * Estimate the number of beneficiaries for a donation based on its category.
@@ -150,9 +159,15 @@ export function estimateBeneficiaries(
   amount: number,
   category: string,
 ): number {
-  const rate =
-    BENEFICIARY_RATES[category.toLowerCase()] ?? DEFAULT_BENEFICIARY_RATE;
-  return Math.max(0, Math.floor(amount / rate));
+  if (amount <= 0) return 0;
+
+  const resolvedCategory = resolveImpactCategory(category);
+  const rate = BENEFICIARY_RATES[resolvedCategory] ?? DEFAULT_BENEFICIARY_RATE;
+
+  if (rate <= 0) return 0;
+
+  // User-facing impact should not show zero beneficiaries for positive donations.
+  return Math.max(1, Math.ceil(amount / rate));
 }
 
 /**

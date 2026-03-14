@@ -8,6 +8,8 @@ import { ChatGroq } from "@langchain/groq";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { FraudScore } from "../state";
 
+const NARRATIVE_TIMEOUT_MS = 8_000;
+
 const analyzeFraudSchema = z.object({
   campaigns: z
     .array(
@@ -29,7 +31,7 @@ const analyzeFraudSchema = z.object({
 });
 
 const narrativeAnalysisLlm = new ChatGroq({
-  model: "llama-3.3-70b-versatile",
+  model: "qwen/qwen3-32b",
   temperature: 0,
   apiKey: process.env.GROQ_API_KEY,
 }).withStructuredOutput(
@@ -62,116 +64,123 @@ export const analyzeFraudTool = tool(
   async (input): Promise<string> => {
     const scores: Record<string, FraudScore> = {};
 
-    for (const campaign of input.campaigns) {
-      // Identity Score: LAZ terverifikasi mendapat skor tinggi
-      const identityScore = campaign.lazVerified ? 90 : 35;
+    await Promise.all(
+      input.campaigns.map(async (campaign) => {
+        // Identity Score: LAZ terverifikasi mendapat skor tinggi
+        const identityScore = campaign.lazVerified ? 90 : 35;
 
-      // Financial Score: Rasio collected/target + kewajaran target
-      const fundingRatio =
-        campaign.collectedAmount / Math.max(campaign.targetAmount, 1);
-      const isReasonableTarget =
-        campaign.targetAmount >= 1_000_000 &&
-        campaign.targetAmount <= 50_000_000_000;
-      const financialScore = Math.max(
-        0,
-        Math.min(
-          100,
-          Math.round(
-            (isReasonableTarget ? 50 : 20) +
-              (fundingRatio > 0.1 && fundingRatio < 0.95 ? 30 : 10) +
-              (campaign.fraudFlags && campaign.fraudFlags > 0 ? -20 : 20),
-          ),
-        ),
-      );
-
-      // Temporal Score: Kampanye mendekati deadline tanpa progress mencurigakan
-      let temporalScore = 75;
-      if (campaign.endsAt) {
-        const daysLeft = Math.max(
+        // Financial Score: Rasio collected/target + kewajaran target
+        const fundingRatio =
+          campaign.collectedAmount / Math.max(campaign.targetAmount, 1);
+        const isReasonableTarget =
+          campaign.targetAmount >= 1_000_000 &&
+          campaign.targetAmount <= 50_000_000_000;
+        const financialScore = Math.max(
           0,
-          (new Date(campaign.endsAt).getTime() - Date.now()) / 86400000,
+          Math.min(
+            100,
+            Math.round(
+              (isReasonableTarget ? 50 : 20) +
+                (fundingRatio > 0.1 && fundingRatio < 0.95 ? 30 : 10) +
+                (campaign.fraudFlags && campaign.fraudFlags > 0 ? -20 : 20),
+            ),
+          ),
         );
-        if (daysLeft < 7 && fundingRatio < 0.2) {
-          temporalScore = 30; // Suspiciously low progress near deadline
-        } else if (daysLeft > 30) {
-          temporalScore = 85;
+
+        // Temporal Score: Kampanye mendekati deadline tanpa progress mencurigakan
+        let temporalScore = 75;
+        if (campaign.endsAt) {
+          const daysLeft = Math.max(
+            0,
+            (new Date(campaign.endsAt).getTime() - Date.now()) / 86400000,
+          );
+          if (daysLeft < 7 && fundingRatio < 0.2) {
+            temporalScore = 30; // Suspiciously low progress near deadline
+          } else if (daysLeft > 30) {
+            temporalScore = 85;
+          }
         }
-      }
 
-      // Narrative Score: Hybrid rule-based (40%) + LLM NLP analysis (60%)
-      const narrativeRedFlags = [
-        "darurat",
-        "segera",
-        "mendesak",
-        "terakhir",
-        "urgent",
-        "tolong sekarang",
-        "tidak ada waktu",
-      ];
-      const descLower = campaign.description.toLowerCase();
-      const narrativeFlags = narrativeRedFlags.filter((flag) =>
-        descLower.includes(flag),
-      ).length;
-      const ruleBasedNarrativeScore = Math.max(20, 90 - narrativeFlags * 15);
+        // Narrative Score: Hybrid rule-based (40%) + LLM NLP analysis (60%)
+        const narrativeRedFlags = [
+          "darurat",
+          "segera",
+          "mendesak",
+          "terakhir",
+          "urgent",
+          "tolong sekarang",
+          "tidak ada waktu",
+        ];
+        const descLower = campaign.description.toLowerCase();
+        const narrativeFlags = narrativeRedFlags.filter((flag) =>
+          descLower.includes(flag),
+        ).length;
+        const ruleBasedNarrativeScore = Math.max(20, 90 - narrativeFlags * 15);
 
-      // LLM-based narrative analysis (temp=0 for determinism, fallback to rule-based)
-      const llmNarrativeResult = await narrativeAnalysisLlm
-        .invoke([
-          new SystemMessage(
-            "Anda adalah analis penipuan donasi online. Analisis apakah teks kampanye menggunakan teknik manipulasi psikologis seperti FOMO, urgensi palsu, atau klaim berlebihan. Berikan skor manipulasi 0-100 di mana 0=tidak ada manipulasi (terpercaya) dan 100=sangat manipulatif (berisiko tinggi).",
-          ),
-          new HumanMessage(
-            `Nama kampanye: ${campaign.name}\n\nDeskripsi: ${campaign.description}`,
-          ),
-        ])
-        .catch(() => null);
+        // LLM-based narrative analysis (temp=0 for determinism, fallback to rule-based)
+        const llmNarrativeResult = await Promise.race([
+          narrativeAnalysisLlm
+            .invoke([
+              new SystemMessage(
+                "Anda adalah analis penipuan donasi online. Analisis apakah teks kampanye menggunakan teknik manipulasi psikologis seperti FOMO, urgensi palsu, atau klaim berlebihan. Berikan skor manipulasi 0-100 di mana 0=tidak ada manipulasi (terpercaya) dan 100=sangat manipulatif (berisiko tinggi).",
+              ),
+              new HumanMessage(
+                `Nama kampanye: ${campaign.name}\n\nDeskripsi: ${campaign.description}`,
+              ),
+            ])
+            .catch(() => null),
+          new Promise<null>((resolve) => {
+            setTimeout(() => resolve(null), NARRATIVE_TIMEOUT_MS);
+          }),
+        ]);
 
-      // Hybrid: 40% rule-based + 60% LLM (manipulationScore inverted to trust scale)
-      const llmTrustScore = llmNarrativeResult
-        ? 100 - llmNarrativeResult.manipulationScore
-        : ruleBasedNarrativeScore;
-      const narrativeScore = Math.round(
-        0.4 * ruleBasedNarrativeScore + 0.6 * llmTrustScore,
-      );
+        // Hybrid: 40% rule-based + 60% LLM (manipulationScore inverted to trust scale)
+        const llmTrustScore = llmNarrativeResult
+          ? 100 - llmNarrativeResult.manipulationScore
+          : ruleBasedNarrativeScore;
+        const narrativeScore = Math.round(
+          0.4 * ruleBasedNarrativeScore + 0.6 * llmTrustScore,
+        );
 
-      // Overall weighted score
-      const overallScore = Math.round(
-        narrativeScore * 0.25 +
-          financialScore * 0.3 +
-          temporalScore * 0.2 +
-          identityScore * 0.25,
-      );
+        // Overall weighted score
+        const overallScore = Math.round(
+          narrativeScore * 0.25 +
+            financialScore * 0.3 +
+            temporalScore * 0.2 +
+            identityScore * 0.25,
+        );
 
-      const flags: string[] = [];
-      if (narrativeScore < 50) flags.push("narrative_manipulation");
-      if (financialScore < 50) flags.push("financial_anomaly");
-      if (temporalScore < 50) flags.push("seasonal_pattern");
-      if (identityScore < 50) flags.push("identity_unverified");
+        const flags: string[] = [];
+        if (narrativeScore < 50) flags.push("narrative_manipulation");
+        if (financialScore < 50) flags.push("financial_anomaly");
+        if (temporalScore < 50) flags.push("seasonal_pattern");
+        if (identityScore < 50) flags.push("identity_unverified");
 
-      // Build reasoning
-      const reasoning = buildReasoning({
-        campaignName: campaign.name,
-        overallScore,
-        narrativeScore,
-        financialScore,
-        temporalScore,
-        identityScore,
-        flags,
-        lazVerified: campaign.lazVerified,
-        laz: campaign.laz,
-      });
+        // Build reasoning
+        const reasoning = buildReasoning({
+          campaignName: campaign.name,
+          overallScore,
+          narrativeScore,
+          financialScore,
+          temporalScore,
+          identityScore,
+          flags,
+          lazVerified: campaign.lazVerified,
+          laz: campaign.laz,
+        });
 
-      scores[campaign.id] = {
-        campaignId: campaign.id,
-        overallScore,
-        narrativeScore,
-        financialScore,
-        temporalScore,
-        identityScore,
-        reasoning,
-        flags,
-      };
-    }
+        scores[campaign.id] = {
+          campaignId: campaign.id,
+          overallScore,
+          narrativeScore,
+          financialScore,
+          temporalScore,
+          identityScore,
+          reasoning,
+          flags,
+        };
+      }),
+    );
 
     return JSON.stringify({
       success: true,

@@ -16,7 +16,9 @@ export function CertificateDownloadButton({
     setLoadingPng(true);
     try {
       const res = await fetch(`/api/donations/${donationId}/certificate`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -24,6 +26,9 @@ export function CertificateDownloadButton({
       a.download = `sertifikat-donasi-${donationId.slice(0, 8)}.png`;
       a.click();
       URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Gagal mengunduh sertifikat PNG", error);
+      window.open(`/api/donations/${donationId}/certificate/html`, "_blank");
     } finally {
       setLoadingPng(false);
     }

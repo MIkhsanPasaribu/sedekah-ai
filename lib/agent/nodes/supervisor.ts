@@ -28,7 +28,7 @@ const intentSchema = z.object({
 });
 
 const classifierLlm = new ChatGroq({
-  model: "llama-3.3-70b-versatile",
+  model: "qwen/qwen3-32b",
   temperature: 0,
   apiKey: process.env.GROQ_API_KEY,
 }).withStructuredOutput(intentSchema);

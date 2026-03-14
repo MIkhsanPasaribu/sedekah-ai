@@ -6,13 +6,14 @@
 
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { buildAgentMessage } from "@/lib/agent/utils";
+import { sanitizeModelOutput } from "@/lib/agent/utils";
 import { ChatGroq } from "@langchain/groq";
 import type { SedekahState, Recommendation, AllocationItem } from "../state";
 import { getIslamicContextTool } from "../tools/islamic-context.tool";
 import { formatRupiah } from "@/lib/utils";
 
 const personalizationLlm = new ChatGroq({
-  model: "llama-3.3-70b-versatile",
+  model: "qwen/qwen3-32b",
   temperature: 0.7,
   apiKey: process.env.GROQ_API_KEY,
 });
@@ -155,7 +156,8 @@ export async function recommendNode(
         }\nKampanye yang direkomendasikan: ${campaignNames}`,
       ),
     ]);
-    personalizedIntro = String(personalizationResponse.content) + "\n\n";
+    personalizedIntro =
+      sanitizeModelOutput(String(personalizationResponse.content)) + "\n\n";
   } catch {
     // Fallback: use standard message without personalization
   }

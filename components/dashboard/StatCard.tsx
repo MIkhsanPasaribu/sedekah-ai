@@ -1,4 +1,3 @@
-import { formatRupiah } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { TrendingUp, Heart, Users, Target } from "lucide-react";
 
@@ -33,7 +32,7 @@ export function StatCard({
           <div>
             <p className="text-sm font-medium text-ink-mid">{title}</p>
             <p className="mt-1 text-2xl font-heading font-bold text-ink-black">
-              {typeof value === "number" ? formatRupiah(value) : value}
+              {value}
             </p>
             {subtitle && (
               <p className="mt-0.5 text-xs text-ink-mid">{subtitle}</p>

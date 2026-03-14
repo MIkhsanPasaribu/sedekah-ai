@@ -4,6 +4,16 @@
 
 import { AIMessage } from "@langchain/core/messages";
 
+export function sanitizeModelOutput(content: string): string {
+  if (!content) return "";
+
+  return content
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<think>[\s\S]*$/gi, "")
+    .replace(/<\/?think>/gi, "")
+    .trim();
+}
+
 /**
  * Build a named AIMessage for a specific agent node.
  * Using `name` appears in LangSmith traces as the node label.
@@ -15,5 +25,8 @@ export function buildAgentMessage(
   content: string,
   nodeName: string,
 ): AIMessage {
-  return new AIMessage({ content, name: nodeName });
+  return new AIMessage({
+    content: sanitizeModelOutput(content),
+    name: nodeName,
+  });
 }
