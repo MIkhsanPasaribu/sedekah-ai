@@ -151,7 +151,7 @@ export default function TimPengembangPage() {
               <div className="absolute -inset-1 rounded-3xl bg-gradient-to-r from-brand-gold-core via-brand-green-light to-brand-gold-core opacity-25 blur-xl transition duration-500 group-hover:opacity-50" />
 
               {/* Main Card */}
-              <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#1a3a2a]/80 backdrop-blur-2xl">
+              <div className="relative overflow-hidden rounded-3xl border border-white/30 bg-white/95 backdrop-blur-2xl">
                 <div className="flex flex-col md:flex-row">
                   {/* Photo Section — Left 2/5 */}
                   <div className="relative min-h-[400px] md:w-2/5 md:min-h-[520px]">
@@ -182,7 +182,7 @@ export default function TimPengembangPage() {
                   {/* Content Section — Right 3/5 */}
                   <div className="flex flex-col justify-center p-8 md:w-3/5">
                     {/* The Engineer Title */}
-                    <h1 className="mb-4 text-4xl font-heading font-black tracking-tight text-white md:text-5xl">
+                    <h1 className="mb-4 text-4xl font-heading font-black tracking-tight text-[#0F1923] md:text-5xl">
                       The{" "}
                       <span className="bg-gradient-to-r from-brand-gold-core to-brand-gold-bright bg-clip-text text-transparent">
                         Engineer
@@ -190,7 +190,7 @@ export default function TimPengembangPage() {
                     </h1>
 
                     {/* Description */}
-                    <p className="mb-6 leading-relaxed text-white/50">
+                    <p className="mb-6 leading-relaxed text-slate-700">
                       Di balik platform SEDEKAH.AI yang menggabungkan AI dengan
                       nilai-nilai Islam, terdapat seorang engineer yang{" "}
                       <span className="font-medium text-brand-gold-core">
@@ -201,18 +201,18 @@ export default function TimPengembangPage() {
                         membangun
                       </span>
                       , dan{" "}
-                      <span className="font-medium text-purple-400">
+                      <span className="font-medium text-brand-green-light">
                         mengoptimasi
                       </span>{" "}
                       seluruh infrastruktur AI agentic dan integrasi pembayaran.
                     </p>
 
                     {/* Divider */}
-                    <div className="mb-6 h-px bg-gradient-to-r from-brand-gold-core/50 via-white/20 to-brand-green-light/50" />
+                    <div className="mb-6 h-px bg-gradient-to-r from-brand-gold-core/40 via-slate-300 to-brand-green-light/40" />
 
                     {/* Developer Info */}
                     <div className="mb-6">
-                      <h2 className="mb-2 text-2xl font-bold text-white">
+                      <h2 className="mb-2 text-2xl font-bold text-[#0F1923]">
                         {dev.name}
                       </h2>
 
@@ -223,11 +223,11 @@ export default function TimPengembangPage() {
                         </span>
                       </div>
 
-                      <p className="text-white/50">{dev.prodi}</p>
+                      <p className="text-slate-600">{dev.prodi}</p>
 
-                      <div className="mt-2 inline-flex items-center gap-2 rounded-lg bg-white/5 px-3 py-1">
-                        <BadgeCheck className="h-4 w-4 text-white/40" />
-                        <span className="font-mono text-xs text-white/40">
+                      <div className="mt-2 inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1">
+                        <BadgeCheck className="h-4 w-4 text-slate-500" />
+                        <span className="font-mono text-xs text-slate-600">
                           {dev.nim}
                         </span>
                       </div>
@@ -240,27 +240,27 @@ export default function TimPengembangPage() {
                         target="_blank"
                         rel="noopener noreferrer"
                         title="GitHub"
-                        className="group/social rounded-xl border border-white/5 bg-white/5 p-3 transition-all duration-300 hover:border-white/20 hover:bg-white/10"
+                        className="group/social rounded-xl border border-slate-200 bg-slate-100 p-3 transition-all duration-300 hover:border-slate-300 hover:bg-slate-200"
                       >
-                        <GitHubIcon className="h-5 w-5 text-white/40 transition-colors group-hover/social:text-white" />
+                        <GitHubIcon className="h-5 w-5 text-slate-600 transition-colors group-hover/social:text-slate-900" />
                       </a>
                       <a
                         href={dev.linkedin}
                         target="_blank"
                         rel="noopener noreferrer"
                         title="LinkedIn"
-                        className="group/social rounded-xl border border-white/5 bg-white/5 p-3 transition-all duration-300 hover:border-[#0077b5]/50 hover:bg-[#0077b5]/10"
+                        className="group/social rounded-xl border border-slate-200 bg-slate-100 p-3 transition-all duration-300 hover:border-[#0077b5]/50 hover:bg-[#0077b5]/10"
                       >
-                        <LinkedInIcon className="h-5 w-5 text-white/40 transition-colors group-hover/social:text-[#0077b5]" />
+                        <LinkedInIcon className="h-5 w-5 text-slate-600 transition-colors group-hover/social:text-[#0077b5]" />
                       </a>
                       <a
                         href={dev.instagram}
                         target="_blank"
                         rel="noopener noreferrer"
                         title="Instagram"
-                        className="group/social rounded-xl border border-white/5 bg-white/5 p-3 transition-all duration-300 hover:border-pink-500/50 hover:bg-pink-500/10"
+                        className="group/social rounded-xl border border-slate-200 bg-slate-100 p-3 transition-all duration-300 hover:border-pink-500/50 hover:bg-pink-500/10"
                       >
-                        <InstagramIcon className="h-5 w-5 text-white/40 transition-colors group-hover/social:text-pink-500" />
+                        <InstagramIcon className="h-5 w-5 text-slate-600 transition-colors group-hover/social:text-pink-500" />
                       </a>
                     </div>
 
