@@ -4,10 +4,11 @@
 // Post-payment monitoring + spiritual reflection
 // Transplant RUANG HATI: MuhasabahTrigger
 
-import { AIMessage } from "@langchain/core/messages";
+import { buildAgentMessage } from "@/lib/agent/utils";
 import type { SedekahState, ImpactReport, ImpactItem } from "../state";
 import { getIslamicContextTool } from "../tools/islamic-context.tool";
-import { formatRupiah } from "@/lib/utils";
+import { estimateBeneficiaries, formatRupiah } from "@/lib/utils";
+import { getDonationReflection } from "@/lib/islamic-quotes";
 
 export async function impactTrackerNode(
   state: SedekahState,
@@ -17,27 +18,30 @@ export async function impactTrackerNode(
   if (!recommendation) {
     return {
       messages: [
-        new AIMessage({
-          content: "Menunggu konfirmasi pembayaran...",
-          name: "IMPACT_TRACKER",
-        }),
+        buildAgentMessage(
+          "Menunggu konfirmasi pembayaran...",
+          "IMPACT_TRACKER",
+        ),
       ],
     };
   }
 
   const isPaid = paymentStatus === "paid";
 
+  // Build category lookup from state campaigns
+  const campaignCategoryMap = new Map(
+    (state.campaigns ?? []).map((c) => [c.id, c.category ?? ""]),
+  );
+
   // Generate impact report berdasarkan alokasi (projected atau confirmed)
   const items: ImpactItem[] = recommendation.allocations.map((alloc) => {
-    const beneficiaries = estimateBeneficiaries(
-      alloc.amount,
-      alloc.campaignName,
-    );
+    const category = campaignCategoryMap.get(alloc.campaignId) ?? "";
+    const beneficiaries = estimateBeneficiaries(alloc.amount, category);
 
     return {
       category: alloc.campaignName,
       amount: alloc.amount,
-      description: generateImpactDescription(alloc.amount, alloc.campaignName),
+      description: generateImpactDescription(category, beneficiaries),
       beneficiaries,
     };
   });
@@ -56,7 +60,7 @@ export async function impactTrackerNode(
     ? `${contextData.quote.reference}: "${contextData.quote.translation}"`
     : 'QS Ibrahim (14:7): "Sesungguhnya jika kamu bersyukur, pasti Kami akan menambah (nikmat) kepadamu."';
 
-  const reflectionMessage = buildReflectionMessage(donorIntent);
+  const reflectionMessage = getDonationReflection(donorIntent);
 
   const impactReport: ImpactReport = {
     totalDonated,
@@ -71,49 +75,29 @@ export async function impactTrackerNode(
     : buildProjectedImpactMessage(impactReport);
 
   return {
-    messages: [new AIMessage({ content: message, name: "IMPACT_TRACKER" })],
+    messages: [buildAgentMessage(message, "IMPACT_TRACKER")],
     impactReport,
   };
 }
 
-function estimateBeneficiaries(amount: number, campaignName: string): number {
-  // Simplified estimation — in production, use real data from LAZ reports
-  const lower = campaignName.toLowerCase();
-  if (lower.includes("yatim")) return Math.max(1, Math.round(amount / 500_000));
-  if (lower.includes("pangan") || lower.includes("sembako"))
-    return Math.max(1, Math.round(amount / 100_000));
-  if (lower.includes("kesehatan"))
-    return Math.max(1, Math.round(amount / 1_000_000));
-  if (lower.includes("pendidikan"))
-    return Math.max(1, Math.round(amount / 300_000));
-  if (lower.includes("bencana"))
-    return Math.max(1, Math.round(amount / 200_000));
-  return Math.max(1, Math.round(amount / 250_000));
-}
-
 function generateImpactDescription(
-  amount: number,
-  campaignName: string,
+  category: string,
+  beneficiaries: number,
 ): string {
-  const beneficiaries = estimateBeneficiaries(amount, campaignName);
-  const lower = campaignName.toLowerCase();
-
-  if (lower.includes("yatim")) {
-    return `Mendukung ${beneficiaries} anak yatim selama 1 bulan`;
+  switch (category.toLowerCase()) {
+    case "yatim":
+      return `Mendukung ${beneficiaries} anak yatim selama 1 bulan`;
+    case "pangan":
+      return `${beneficiaries} paket sembako untuk keluarga dhuafa`;
+    case "kesehatan":
+      return `Bantuan medis untuk ${beneficiaries} pasien`;
+    case "pendidikan":
+      return `Beasiswa untuk ${beneficiaries} siswa selama 1 semester`;
+    case "bencana":
+      return `Bantuan darurat untuk ${beneficiaries} keluarga terdampak`;
+    default:
+      return `Membantu ${beneficiaries} penerima manfaat`;
   }
-  if (lower.includes("pangan") || lower.includes("sembako")) {
-    return `${beneficiaries} paket sembako untuk keluarga dhuafa`;
-  }
-  if (lower.includes("kesehatan")) {
-    return `Bantuan medis untuk ${beneficiaries} pasien`;
-  }
-  if (lower.includes("pendidikan")) {
-    return `Beasiswa untuk ${beneficiaries} siswa selama 1 semester`;
-  }
-  if (lower.includes("bencana")) {
-    return `Bantuan darurat untuk ${beneficiaries} keluarga terdampak`;
-  }
-  return `Membantu ${beneficiaries} penerima manfaat`;
 }
 
 function calculateImpactScore(items: ImpactItem[]): number {
@@ -126,28 +110,6 @@ function calculateImpactScore(items: ImpactItem[]): number {
   const baseScore = 30;
 
   return Math.min(100, baseScore + diversityBonus + beneficiaryScore);
-}
-
-function buildReflectionMessage(intent: string | null): string {
-  const messages: Record<string, string> = {
-    zakat_mal:
-      "Alhamdulillah, zakat Anda telah membersihkan harta dan menyucikan jiwa. Semoga menjadi perisai dari api neraka.",
-    zakat_fitrah:
-      "Alhamdulillah, zakat fitrah Anda melengkapi ibadah puasa Ramadhan. Semoga menjadi pembersih jiwa menjelang Idul Fitri.",
-    sedekah:
-      "Alhamdulillah, sedekah Anda tidak akan mengurangi harta, melainkan menambahnya. Semoga Allah melipatgandakan kebaikan Anda.",
-    infaq:
-      "Alhamdulillah, infaq Anda menjadi cahaya di dunia dan di akhirat. Semoga Allah membalas dengan yang lebih baik.",
-    wakaf:
-      "Alhamdulillah, wakaf Anda menjadi amal jariyah yang pahalanya tidak terputus. Semoga mengalir terus meski Anda telah tiada.",
-    bencana:
-      "Alhamdulillah, bantuan Anda menjadi secercah harapan bagi saudara kita yang terdampak. Semoga Allah meringankan beban mereka.",
-  };
-
-  return (
-    messages[intent ?? "sedekah"] ??
-    "Alhamdulillah, donasi Anda telah tersalurkan. Semoga Allah melipatgandakan kebaikan Anda. 🤲"
-  );
 }
 
 function buildImpactMessage(report: ImpactReport): string {

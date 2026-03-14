@@ -4,7 +4,8 @@
 // Hitung semua jenis zakat, attach ayat QS 9:103
 // Transplant RUANG HATI: IslamicContextTool
 
-import { AIMessage, SystemMessage } from "@langchain/core/messages";
+import { SystemMessage } from "@langchain/core/messages";
+import { buildAgentMessage } from "@/lib/agent/utils";
 import type { SedekahState } from "../state";
 import { zakatCalculatorTool } from "../tools/zakat.tool";
 import { getIslamicContextTool } from "../tools/islamic-context.tool";
@@ -47,10 +48,10 @@ export async function calculateNode(
 
     return {
       messages: [
-        new AIMessage({
-          content: `Alhamdulillah, niat ${donorIntent ?? "sedekah"} Anda sangat mulia. ${islamicContext ? `\n\n📖 ${islamicContext}` : ""}\n\nMari kita carikan kampanye yang tepat untuk donasi Anda.`,
-          name: "CALCULATE",
-        }),
+        buildAgentMessage(
+          `Alhamdulillah, niat ${donorIntent ?? "sedekah"} Anda sangat mulia. ${islamicContext ? `\n\n📖 ${islamicContext}` : ""}\n\nMari kita carikan kampanye yang tepat untuk donasi Anda.`,
+          "CALCULATE",
+        ),
       ],
       islamicContext,
     };
@@ -63,7 +64,7 @@ export async function calculateNode(
     emas: userFinancialData.emas ?? 0,
     saham: userFinancialData.saham ?? 0,
     crypto: userFinancialData.crypto ?? 0,
-    hutang: userFinancialData.hutang ?? 0,
+    hutang: Math.max(0, userFinancialData.hutang ?? 0),
     jumlahJiwa: userFinancialData.jumlahJiwa ?? 0,
   });
 
@@ -84,7 +85,7 @@ export async function calculateNode(
   const message = buildCalculationMessage(zakatBreakdown, islamicContext);
 
   return {
-    messages: [new AIMessage({ content: message, name: "CALCULATE" })],
+    messages: [buildAgentMessage(message, "CALCULATE")],
     zakatBreakdown,
     islamicContext,
   };

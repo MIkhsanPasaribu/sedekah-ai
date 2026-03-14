@@ -4,7 +4,7 @@
 // interrupt: human approval → create Mayar invoice → return payment link
 // Transplant RUANG HATI: Loading state dengan animasi dzikir singkat
 
-import { AIMessage } from "@langchain/core/messages";
+import { buildAgentMessage } from "@/lib/agent/utils";
 import type { SedekahState } from "../state";
 import { createMayarInvoiceTool } from "../tools/mayar.tool";
 import { createCustomer } from "@/lib/mayar/customer";
@@ -19,11 +19,10 @@ export async function paymentExecutorNode(
   if (!recommendation || recommendation.allocations.length === 0) {
     return {
       messages: [
-        new AIMessage({
-          content:
-            "Belum ada rekomendasi alokasi. Silakan mulai proses dari awal.",
-          name: "PAYMENT_EXECUTOR",
-        }),
+        buildAgentMessage(
+          "Belum ada rekomendasi alokasi. Silakan mulai proses dari awal.",
+          "PAYMENT_EXECUTOR",
+        ),
       ],
     };
   }
@@ -33,11 +32,10 @@ export async function paymentExecutorNode(
   if (totalAmount <= 0) {
     return {
       messages: [
-        new AIMessage({
-          content:
-            "Silakan tentukan nominal donasi yang ingin Anda salurkan. 🤲",
-          name: "PAYMENT_EXECUTOR",
-        }),
+        buildAgentMessage(
+          "Silakan tentukan nominal donasi yang ingin Anda salurkan. 🤲",
+          "PAYMENT_EXECUTOR",
+        ),
       ],
     };
   }
@@ -88,10 +86,10 @@ export async function paymentExecutorNode(
   if (!parsed.success) {
     return {
       messages: [
-        new AIMessage({
-          content: `Mohon maaf, terjadi kendala saat memproses pembayaran. Silakan coba beberapa saat lagi. 🤲\n\n_Kami sedang memperbaiki masalah ini._`,
-          name: "PAYMENT_EXECUTOR",
-        }),
+        buildAgentMessage(
+          `Mohon maaf, terjadi kendala saat memproses pembayaran. Silakan coba beberapa saat lagi. 🤲\n\n_Kami sedang memperbaiki masalah ini._`,
+          "PAYMENT_EXECUTOR",
+        ),
       ],
       paymentStatus: "failed",
     };
@@ -168,7 +166,7 @@ export async function paymentExecutorNode(
   );
 
   return {
-    messages: [new AIMessage({ content: message, name: "PAYMENT_EXECUTOR" })],
+    messages: [buildAgentMessage(message, "PAYMENT_EXECUTOR")],
     mayarInvoiceLink: paymentLink,
     invoiceId,
     paymentStatus: "pending",

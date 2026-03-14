@@ -3,7 +3,7 @@
 // ============================================================
 // NLP trust scoring, temporal + network analysis
 
-import { AIMessage } from "@langchain/core/messages";
+import { buildAgentMessage } from "@/lib/agent/utils";
 import type { SedekahState, FraudScore } from "../state";
 import { analyzeFraudTool } from "../tools/fraud.tool";
 import { getTrustScoreLabel } from "@/lib/utils";
@@ -16,10 +16,10 @@ export async function fraudDetectorNode(
   if (!campaigns || campaigns.length === 0) {
     return {
       messages: [
-        new AIMessage({
-          content: "Tidak ada kampanye untuk dianalisis.",
-          name: "FRAUD_DETECTOR",
-        }),
+        buildAgentMessage(
+          "Tidak ada kampanye untuk dianalisis.",
+          "FRAUD_DETECTOR",
+        ),
       ],
       fraudScores: {},
     };
@@ -82,9 +82,7 @@ export async function fraudDetectorNode(
   );
 
   return {
-    messages: [
-      new AIMessage({ content: lines.join("\n"), name: "FRAUD_DETECTOR" }),
-    ],
+    messages: [buildAgentMessage(lines.join("\n"), "FRAUD_DETECTOR")],
     fraudScores,
   };
 }

@@ -4,10 +4,18 @@
 // Alokasi optimal berdasarkan urgency + gap + donorIntent
 // Transplant RUANG HATI: Attach hadith kontekstual per rekomendasi
 
-import { AIMessage, SystemMessage } from "@langchain/core/messages";
+import { SystemMessage, HumanMessage } from "@langchain/core/messages";
+import { buildAgentMessage } from "@/lib/agent/utils";
+import { ChatGroq } from "@langchain/groq";
 import type { SedekahState, Recommendation, AllocationItem } from "../state";
 import { getIslamicContextTool } from "../tools/islamic-context.tool";
 import { formatRupiah } from "@/lib/utils";
+
+const personalizationLlm = new ChatGroq({
+  model: "llama-3.3-70b-versatile",
+  temperature: 0.7,
+  apiKey: process.env.GROQ_API_KEY,
+});
 
 export async function recommendNode(
   state: SedekahState,
@@ -20,11 +28,10 @@ export async function recommendNode(
   if (!campaigns || campaigns.length === 0) {
     return {
       messages: [
-        new AIMessage({
-          content:
-            "Mohon maaf, tidak ada kampanye yang bisa direkomendasikan saat ini.",
-          name: "RECOMMEND",
-        }),
+        buildAgentMessage(
+          "Mohon maaf, tidak ada kampanye yang bisa direkomendasikan saat ini.",
+          "RECOMMEND",
+        ),
       ],
     };
   }
@@ -47,11 +54,10 @@ export async function recommendNode(
   if (trustedCampaigns.length === 0) {
     return {
       messages: [
-        new AIMessage({
-          content:
-            "⚠️ Mohon maaf, semua kampanye yang ditemukan memiliki tingkat risiko tinggi. Kami sarankan untuk menunggu kampanye terverifikasi tersedia. Keselamatan donasi Anda adalah prioritas kami. 🤲",
-          name: "RECOMMEND",
-        }),
+        buildAgentMessage(
+          "⚠️ Mohon maaf, semua kampanye yang ditemukan memiliki tingkat risiko tinggi. Kami sarankan untuk menunggu kampanye terverifikasi tersedia. Keselamatan donasi Anda adalah prioritas kami. 🤲",
+          "RECOMMEND",
+        ),
       ],
     };
   }
@@ -131,11 +137,30 @@ export async function recommendNode(
     islamicContext,
   };
 
-  // Build message
+  // Build base message
   const message = buildRecommendationMessage(recommendation, donorIntent);
 
+  // Generate personalized intro via LLM (fallback: empty string)
+  let personalizedIntro = "";
+  try {
+    const campaignNames = allocations.map((a) => a.campaignName).join(", ");
+    const personalizationResponse = await personalizationLlm.invoke([
+      new SystemMessage(
+        "Anda adalah asisten donasi islami yang hangat dan empatik. Tulis 2-3 kalimat Bahasa Indonesia yang personal dan menyentuh hati untuk menjelaskan mengapa rekomendasi kampanye ini tepat untuk niat donasi pengguna. Jangan sebut angka nominal. Tutup dengan doa singkat.",
+      ),
+      new HumanMessage(
+        `Niat donasi: ${
+          donorIntent ?? "sedekah"
+        }\nKampanye yang direkomendasikan: ${campaignNames}`,
+      ),
+    ]);
+    personalizedIntro = String(personalizationResponse.content) + "\n\n";
+  } catch {
+    // Fallback: use standard message without personalization
+  }
+
   return {
-    messages: [new AIMessage({ content: message, name: "RECOMMEND" })],
+    messages: [buildAgentMessage(personalizedIntro + message, "RECOMMEND")],
     recommendation,
   };
 }

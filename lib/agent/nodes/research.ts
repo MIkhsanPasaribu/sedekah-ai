@@ -3,7 +3,7 @@
 // ============================================================
 // Query campaign DB, filter by niat/preferensi
 
-import { AIMessage } from "@langchain/core/messages";
+import { buildAgentMessage } from "@/lib/agent/utils";
 import type { SedekahState, CampaignData } from "../state";
 import { searchCampaignsTool } from "../tools/campaigns.tool";
 
@@ -51,11 +51,10 @@ export async function researchNode(
   if (!parsed.success || parsed.count === 0) {
     return {
       messages: [
-        new AIMessage({
-          content:
-            "Mohon maaf, saat ini belum ada kampanye aktif yang sesuai dengan preferensi Anda. Kami sedang mengupdate database kampanye. 🤲",
-          name: "RESEARCH",
-        }),
+        buildAgentMessage(
+          "Mohon maaf, saat ini belum ada kampanye aktif yang sesuai dengan preferensi Anda. Kami sedang mengupdate database kampanye. 🤲",
+          "RESEARCH",
+        ),
       ],
       campaigns: [],
     };
@@ -82,7 +81,7 @@ export async function researchNode(
   const message = `🔍 Ditemukan **${campaigns.length} kampanye** yang sesuai dengan niat Anda. Sekarang saya akan menganalisis tingkat kepercayaan masing-masing kampanye...`;
 
   return {
-    messages: [new AIMessage({ content: message, name: "RESEARCH" })],
+    messages: [buildAgentMessage(message, "RESEARCH")],
     campaigns,
   };
 }
