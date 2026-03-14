@@ -115,6 +115,7 @@ model Donation {
   @@index([campaignId])
   @@index([status])
   @@index([mayarInvoiceId])
+  @@index([createdAt])
   @@map("donations")
 }
 
