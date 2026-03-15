@@ -14,17 +14,7 @@ import {
   resolveImpactCategory,
 } from "@/lib/utils";
 import { getDonationReflection } from "@/lib/islamic-quotes";
-import { z } from "zod";
-
-const islamicContextResultSchema = z.object({
-  success: z.boolean(),
-  quote: z
-    .object({
-      reference: z.string(),
-      translation: z.string(),
-    })
-    .optional(),
-});
+import { islamicContextResultSchema } from "../schemas/islamic-context.schema";
 
 export async function impactTrackerNode(
   state: SedekahState,

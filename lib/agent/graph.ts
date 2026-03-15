@@ -72,10 +72,16 @@ function routeAfterIntake(state: SedekahState): string {
 }
 
 function routeAfterSupervisor(state: SedekahState): string {
+  // Direct edit_allocation intent: skip full pipeline, go straight to RECOMMEND_EDIT
+  if (state.supervisorIntent === "edit_allocation") {
+    return "RECOMMEND_EDIT";
+  }
+
   if (state.editMode && state.previousRecommendation) {
     return "RECOMMEND_EDIT";
   }
 
+  // follow_up, donation, info, greeting → INTAKE handles all conversational intents
   return "INTAKE";
 }
 

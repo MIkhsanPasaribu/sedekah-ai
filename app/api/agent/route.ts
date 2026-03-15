@@ -18,6 +18,7 @@ import {
 } from "@/lib/agent/utils";
 import { getAiRuntimeConfig } from "@/lib/env";
 import { recordAgentStreamMetric } from "@/lib/agent/observability";
+import { agentRequestBodySchema } from "@/lib/validations/ai";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -119,12 +120,30 @@ export async function POST(req: NextRequest): Promise<Response> {
   const requestStartMs = Date.now();
 
   try {
-    const body = await req.json();
-    const { messages, threadId, action } = body as {
-      messages?: Array<{ role: string; content: string }>;
-      threadId?: string;
-      action?: "approve" | "edit";
-    };
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return jsonWithCorrelation(
+        { error: "Payload JSON tidak valid" },
+        400,
+        correlationId,
+      );
+    }
+
+    const parsedBody = agentRequestBodySchema.safeParse(body);
+    if (!parsedBody.success) {
+      return jsonWithCorrelation(
+        {
+          error:
+            parsedBody.error.issues[0]?.message ?? "Format request tidak valid",
+        },
+        400,
+        correlationId,
+      );
+    }
+
+    const { messages, threadId, action } = parsedBody.data;
 
     logAgentEvent("info", "agent.request.received", correlationId, {
       action: action ?? null,

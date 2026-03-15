@@ -4,31 +4,16 @@
 // Hitung semua jenis zakat, attach ayat QS 9:103
 // Transplant RUANG HATI: IslamicContextTool
 
-import { SystemMessage } from "@langchain/core/messages";
+
 import { buildAgentMessage } from "@/lib/agent/utils";
 import { parseJsonWithSchema } from "@/lib/agent/utils";
 import type { SedekahState } from "../state";
 import { zakatCalculatorTool } from "../tools/zakat.tool";
 import { getIslamicContextTool } from "../tools/islamic-context.tool";
-import {
-  NISAB_RUPIAH,
-  TARIF_ZAKAT,
-  HARGA_EMAS_PER_GRAM,
-  ZAKAT_FITRAH_PER_JIWA,
-  formatRupiah,
-} from "@/lib/utils";
+import { formatRupiah } from "@/lib/utils";
 import type { ZakatBreakdown } from "../state";
 import { z } from "zod";
-
-const islamicContextResultSchema = z.object({
-  success: z.boolean(),
-  quote: z
-    .object({
-      reference: z.string(),
-      translation: z.string(),
-    })
-    .optional(),
-});
+import { islamicContextResultSchema } from "../schemas/islamic-context.schema";
 
 const zakatBreakdownSchema = z.object({
   zakatPenghasilan: z.number(),

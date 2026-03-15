@@ -9,24 +9,7 @@ import type { SedekahState, FraudScore } from "../state";
 import { analyzeFraudTool } from "../tools/fraud.tool";
 import { getTrustScoreLabel } from "@/lib/utils";
 import { getFraudAnalysisTopN } from "@/lib/env";
-import { z } from "zod";
-
-const fraudToolResultSchema = z.object({
-  success: z.boolean(),
-  fraudScores: z.record(
-    z.string(),
-    z.object({
-      campaignId: z.string(),
-      overallScore: z.number(),
-      narrativeScore: z.number(),
-      financialScore: z.number(),
-      temporalScore: z.number(),
-      identityScore: z.number(),
-      reasoning: z.string(),
-      flags: z.array(z.string()),
-    }),
-  ),
-});
+import { fraudToolResultSchema } from "../schemas/fraud.schema";
 
 export async function fraudDetectorNode(
   state: SedekahState,

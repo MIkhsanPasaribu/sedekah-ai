@@ -8,27 +8,26 @@ import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { buildAgentMessage } from "@/lib/agent/utils";
 import { sanitizeModelOutput } from "@/lib/agent/utils";
 import { parseJsonWithSchema } from "@/lib/agent/utils";
-import type { SedekahState, Recommendation, AllocationItem } from "../state";
+import type {
+  SedekahState,
+  Recommendation,
+  AllocationItem,
+  CampaignData,
+  FraudScore,
+} from "../state";
 import { getIslamicContextTool } from "../tools/islamic-context.tool";
 import { formatRupiah } from "@/lib/utils";
 import { getAiRuntimeConfig } from "@/lib/env";
 import { invokeTaskWithModelFallback } from "@/lib/models/factory";
-import { z } from "zod";
+import { islamicContextResultSchema } from "../schemas/islamic-context.schema";
+import { prisma } from "@/lib/prisma";
 const aiRuntime = getAiRuntimeConfig();
-const islamicContextResultSchema = z.object({
-  success: z.boolean(),
-  quote: z
-    .object({
-      reference: z.string(),
-      translation: z.string(),
-    })
-    .optional(),
-});
 
 export async function recommendNode(
   state: SedekahState,
 ): Promise<Partial<SedekahState>> {
-  const { campaigns, fraudScores, zakatBreakdown, donorIntent } = state;
+  const { campaigns, fraudScores, zakatBreakdown, donorIntent, donorEmail } =
+    state;
 
   // Tentukan total amount: gunakan kalkulasi zakat, atau nominal custom untuk sedekah/infaq
   const totalAmount = zakatBreakdown?.totalKewajiban ?? state.customAmount ?? 0;
@@ -44,20 +43,17 @@ export async function recommendNode(
     };
   }
 
+  const preferredCategories = donorEmail
+    ? await getPreferredCategoriesByDonorEmail(donorEmail)
+    : [];
+
   // Filter kampanye dengan trust score tinggi (>= 55)
   const trustedCampaigns = campaigns
     .filter((c) => {
       const score = fraudScores[c.id]?.overallScore ?? c.trustScore;
       return score >= 55;
     })
-    .sort((a, b) => {
-      const scoreA = fraudScores[a.id]?.overallScore ?? a.trustScore;
-      const scoreB = fraudScores[b.id]?.overallScore ?? b.trustScore;
-      // Sort by urgency (gap to target) then trust score
-      const gapA = a.targetAmount - a.collectedAmount;
-      const gapB = b.targetAmount - b.collectedAmount;
-      return scoreB - scoreA || gapB - gapA;
-    });
+    .sort((a, b) => compareCampaignPriority(a, b, fraudScores));
 
   if (trustedCampaigns.length === 0) {
     return {
@@ -88,8 +84,13 @@ export async function recommendNode(
     };
   }
 
-  // Buat alokasi: max 3 kampanye teratas
-  const topCampaigns = trustedCampaigns.slice(0, 3);
+  // Buat alokasi: max 3 kampanye teratas with category diversification
+  const rankedCampaigns = rankCampaignsByPreference(
+    trustedCampaigns,
+    fraudScores,
+    preferredCategories,
+  );
+  const topCampaigns = selectDiversifiedCampaigns(rankedCampaigns, fraudScores);
   const allocations: AllocationItem[] = [];
 
   // Distribusi berdasarkan weighted score
@@ -98,11 +99,30 @@ export async function recommendNode(
     0,
   );
 
-  for (const campaign of topCampaigns) {
+  // Compute raw weights for largest-remainder allocation
+  const rawWeights = topCampaigns.map((c) => {
+    const score = fraudScores[c.id]?.overallScore ?? c.trustScore;
+    return score / totalScore;
+  });
+
+  // Largest-remainder method: prevents Rp 0 allocations
+  const rawAmounts = rawWeights.map((w) => Math.floor(totalAmount * w));
+  let remainder = totalAmount - rawAmounts.reduce((s, a) => s + a, 0);
+  const fractionals = rawWeights
+    .map((w, i) => ({ index: i, frac: totalAmount * w - rawAmounts[i] }))
+    .sort((a, b) => b.frac - a.frac);
+
+  for (const item of fractionals) {
+    if (remainder <= 0) break;
+    rawAmounts[item.index] += 1;
+    remainder -= 1;
+  }
+
+  for (let i = 0; i < topCampaigns.length; i++) {
+    const campaign = topCampaigns[i];
     const score = fraudScores[campaign.id]?.overallScore ?? campaign.trustScore;
-    const weight = score / totalScore;
-    const amount = Math.round(totalAmount * weight);
-    const percentage = Math.round(weight * 100);
+    const amount = rawAmounts[i];
+    const percentage = Math.round(rawWeights[i] * 100);
 
     allocations.push({
       campaignId: campaign.id,
@@ -112,12 +132,6 @@ export async function recommendNode(
       reasoning: `Trust Score ${score}/100 — ${campaign.laz} (${campaign.lazVerified ? "Terverifikasi" : "Belum Terverifikasi"})`,
       trustScore: score,
     });
-  }
-
-  // Sesuaikan rounding agar total tepat
-  const allocatedTotal = allocations.reduce((sum, a) => sum + a.amount, 0);
-  if (allocations.length > 0 && allocatedTotal !== totalAmount) {
-    allocations[0].amount += totalAmount - allocatedTotal;
   }
 
   // Ambil Islamic context
@@ -190,9 +204,122 @@ export async function recommendNode(
   };
 }
 
+function compareCampaignPriority(
+  a: CampaignData,
+  b: CampaignData,
+  fraudScores: Record<string, FraudScore>,
+): number {
+  const scoreA = fraudScores[a.id]?.overallScore ?? a.trustScore;
+  const scoreB = fraudScores[b.id]?.overallScore ?? b.trustScore;
+  const gapA = a.targetAmount - a.collectedAmount;
+  const gapB = b.targetAmount - b.collectedAmount;
+  return scoreB - scoreA || gapB - gapA;
+}
+
+function rankCampaignsByPreference(
+  campaigns: CampaignData[],
+  fraudScores: Record<string, FraudScore>,
+  preferredCategories: string[],
+): CampaignData[] {
+  if (preferredCategories.length === 0) {
+    return campaigns;
+  }
+
+  const preferenceRank = new Map<string, number>(
+    preferredCategories.map((category, index) => [category, index]),
+  );
+
+  return [...campaigns].sort((a, b) => {
+    const rankA = preferenceRank.get(a.category.toLowerCase());
+    const rankB = preferenceRank.get(b.category.toLowerCase());
+
+    const bonusA = rankA === undefined ? 0 : Math.max(2, 8 - rankA * 2);
+    const bonusB = rankB === undefined ? 0 : Math.max(2, 8 - rankB * 2);
+
+    if (bonusA !== bonusB) {
+      return bonusB - bonusA;
+    }
+
+    return compareCampaignPriority(a, b, fraudScores);
+  });
+}
+
+async function getPreferredCategoriesByDonorEmail(
+  donorEmail: string,
+): Promise<string[]> {
+  if (!donorEmail.trim()) {
+    return [];
+  }
+
+  try {
+    const recentDonations = await prisma.donation.findMany({
+      where: {
+        status: "paid",
+        user: { email: donorEmail },
+        campaign: { isNot: null },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: {
+        campaign: {
+          select: { category: true },
+        },
+      },
+    });
+
+    const categoryCounts = new Map<string, number>();
+    for (const donation of recentDonations) {
+      const category = donation.campaign?.category?.toLowerCase();
+      if (!category) continue;
+      categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
+    }
+
+    return [...categoryCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([category]) => category)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
+// ---------- Category Diversification ----------
+
+/**
+ * Select top-3 campaigns with category diversity constraint.
+ * If all top-3 share the same category AND there are alternatives,
+ * swap the lowest-scored one for the best from a different category.
+ */
+function selectDiversifiedCampaigns(
+  trustedCampaigns: CampaignData[],
+  fraudScores: Record<string, FraudScore>,
+): CampaignData[] {
+  const top3 = trustedCampaigns.slice(0, 3);
+  if (top3.length < 2) return top3;
+
+  const categories = new Set(top3.map((c) => c.category));
+  if (categories.size > 1) return top3; // Already diverse
+
+  // All same category — find best alternative from a different category
+  const sharedCategory = top3[0].category;
+  const alternative = trustedCampaigns.find(
+    (c) =>
+      c.category !== sharedCategory &&
+      (fraudScores[c.id]?.overallScore ?? c.trustScore) >= 55 &&
+      !top3.includes(c),
+  );
+
+  if (!alternative) return top3; // No viable alternative
+
+  // Swap the last (lowest-scored) of top-3 with the alternative
+  const result = [...top3];
+  result[result.length - 1] = alternative;
+  return result;
+}
+
 function buildRecommendationMessage(
   rec: Recommendation,
-  intent: string | null,
+  _intent: string | null,
 ): string {
   const lines: string[] = [`💡 **Rekomendasi Alokasi Donasi**\n`];
 

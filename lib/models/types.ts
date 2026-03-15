@@ -13,6 +13,7 @@ export type AiModelTask =
   | "agent_intake_conversational"
   | "agent_intake_extraction"
   | "agent_recommend_personalization"
+  | "agent_recommend_diversity"
   | "agent_fraud_narrative"
   | "dashboard_daily_nudge"
   | "dashboard_impact_narrative"

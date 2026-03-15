@@ -224,6 +224,8 @@ export async function intakeNode(
       : "";
 
   // Merge extracted data onto existing state (prefer new values when non-null)
+  // Incremental merge: preserve existing non-null fields to avoid data loss
+  // when users provide financial info across multiple messages.
   let donorIntent = state.donorIntent;
   let userFinancialData = state.userFinancialData;
   let customAmount = state.customAmount;
@@ -234,14 +236,16 @@ export async function intakeNode(
       customAmount = extracted.customAmount;
 
     if (extracted.dataComplete) {
+      // Incremental merge: only overwrite fields that were explicitly extracted
+      const prev = userFinancialData;
       userFinancialData = {
-        penghasilan: extracted.penghasilan ?? 0,
-        tabungan: extracted.tabungan ?? 0,
-        emas: extracted.emas ?? 0,
-        saham: extracted.saham ?? 0,
-        crypto: extracted.crypto ?? 0,
-        hutang: extracted.hutang ?? 0,
-        jumlahJiwa: extracted.jumlahJiwa ?? 0,
+        penghasilan: extracted.penghasilan ?? prev?.penghasilan ?? 0,
+        tabungan: extracted.tabungan ?? prev?.tabungan ?? 0,
+        emas: extracted.emas ?? prev?.emas ?? 0,
+        saham: extracted.saham ?? prev?.saham ?? 0,
+        crypto: extracted.crypto ?? prev?.crypto ?? 0,
+        hutang: extracted.hutang ?? prev?.hutang ?? 0,
+        jumlahJiwa: extracted.jumlahJiwa ?? prev?.jumlahJiwa ?? 0,
       };
     }
   }

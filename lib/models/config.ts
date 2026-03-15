@@ -11,6 +11,7 @@ const TASK_MODEL_TIER: Record<AiModelTask, ModelTier> = {
   agent_intake_conversational: "balanced",
   agent_intake_extraction: "reasoning",
   agent_recommend_personalization: "reasoning",
+  agent_recommend_diversity: "economy",
   agent_fraud_narrative: "reasoning",
   dashboard_daily_nudge: "economy",
   dashboard_impact_narrative: "balanced",

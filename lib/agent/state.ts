@@ -221,8 +221,10 @@ export const SedekahStateAnnotation = Annotation.Root({
     default: () => false,
   }),
 
-  /** Supervisor intent classification (donation/info/greeting) */
-  supervisorIntent: Annotation<"donation" | "info" | "greeting" | null>({
+  /** Supervisor intent classification */
+  supervisorIntent: Annotation<
+    "donation" | "info" | "greeting" | "edit_allocation" | "follow_up" | null
+  >({
     reducer: (_prev, next) => next,
     default: () => null,
   }),

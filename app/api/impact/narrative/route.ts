@@ -10,6 +10,7 @@ import { formatRupiah } from "@/lib/utils";
 import { sanitizeCardNarrativeOutput } from "@/lib/agent/utils";
 import { getAiRuntimeConfig } from "@/lib/env";
 import { invokeTaskWithModelFallback } from "@/lib/models/factory";
+import { impactNarrativeRequestBodySchema } from "@/lib/validations/ai";
 
 export const runtime = "nodejs";
 
@@ -23,15 +24,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
-  const { donationId } = body;
-
-  if (!donationId || typeof donationId !== "string") {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
     return NextResponse.json(
-      { error: "donationId diperlukan" },
+      { error: "Payload JSON tidak valid" },
       { status: 400 },
     );
   }
+
+  const parsedBody = impactNarrativeRequestBodySchema.safeParse(body);
+  if (!parsedBody.success) {
+    return NextResponse.json(
+      {
+        error:
+          parsedBody.error.issues[0]?.message ?? "Format request tidak valid",
+      },
+      { status: 400 },
+    );
+  }
+
+  const { donationId } = parsedBody.data;
 
   const donation = await prisma.donation.findUnique({
     where: { id: donationId },

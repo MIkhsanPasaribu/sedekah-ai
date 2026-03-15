@@ -12,6 +12,7 @@ import { createCustomer } from "@/lib/mayar/customer";
 import { prisma } from "@/lib/prisma";
 import { formatRupiah } from "@/lib/utils";
 import { validateRecommendationRuntime } from "@/lib/validations/recommendation";
+import { validateMayarPaymentLink } from "@/lib/validations/payment";
 import { z } from "zod";
 
 const createInvoiceResultSchema = z.object({
@@ -166,7 +167,24 @@ export async function paymentExecutorNode(
     };
   }
 
-  const paymentLink: string = parsed.paymentLink;
+  const validatedPaymentLink = validateMayarPaymentLink(parsed.paymentLink);
+  if (!validatedPaymentLink.success) {
+    console.error(
+      "[PAYMENT_EXECUTOR] Invalid payment link:",
+      validatedPaymentLink.error,
+    );
+    return {
+      messages: [
+        buildAgentMessage(
+          "Link pembayaran dari gateway belum valid. Silakan coba lagi beberapa saat.",
+          "PAYMENT_EXECUTOR",
+        ),
+      ],
+      paymentStatus: "failed",
+    };
+  }
+
+  const paymentLink: string = validatedPaymentLink.url;
   const invoiceId: string = parsed.invoiceId;
 
   // Simpan donation record ke DB agar webhook bisa match
