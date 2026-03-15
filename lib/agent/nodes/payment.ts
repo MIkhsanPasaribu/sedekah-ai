@@ -169,9 +169,16 @@ export async function paymentExecutorNode(
 
   const validatedPaymentLink = validateMayarPaymentLink(parsed.paymentLink);
   if (!validatedPaymentLink.success) {
+    let paymentHost = "unknown";
+    try {
+      paymentHost = new URL(parsed.paymentLink).hostname;
+    } catch {
+      // Ignore malformed URL; validator already handles this path.
+    }
     console.error(
       "[PAYMENT_EXECUTOR] Invalid payment link:",
       validatedPaymentLink.error,
+      { paymentHost },
     );
     return {
       messages: [
