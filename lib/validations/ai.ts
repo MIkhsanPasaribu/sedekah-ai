@@ -13,14 +13,23 @@ export const agentMessageSchema = z.object({
 
 export const agentRequestBodySchema = z
   .object({
-    messages: z.array(agentMessageSchema).max(50).optional(),
-    threadId: z
-      .string()
-      .trim()
-      .min(1, "threadId tidak boleh kosong")
-      .max(191, "threadId terlalu panjang")
-      .optional(),
-    action: agentActionSchema.optional(),
+    messages: z.preprocess(
+      (value) => (value === null ? undefined : value),
+      z.array(agentMessageSchema).max(50).optional(),
+    ),
+    threadId: z.preprocess(
+      (value) => (value === null ? undefined : value),
+      z
+        .string()
+        .trim()
+        .min(1, "threadId tidak boleh kosong")
+        .max(191, "threadId terlalu panjang")
+        .optional(),
+    ),
+    action: z.preprocess(
+      (value) => (value === null ? undefined : value),
+      agentActionSchema.optional(),
+    ),
   })
   .superRefine((value, ctx) => {
     if (value.action) {

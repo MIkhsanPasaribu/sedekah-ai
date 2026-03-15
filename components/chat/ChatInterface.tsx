@@ -355,11 +355,19 @@ export function ChatInterface({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: sseController.signal,
+        // Guard legacy/null history rows so backend schema only receives valid chat messages.
         body: JSON.stringify({
-          messages: [...messages, userMessage].map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
+          messages: [...messages, userMessage]
+            .filter(
+              (m): m is Message =>
+                (m.role === "user" || m.role === "assistant") &&
+                typeof m.content === "string" &&
+                m.content.trim().length > 0,
+            )
+            .map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
           threadId,
           action: opts?.action,
         }),
