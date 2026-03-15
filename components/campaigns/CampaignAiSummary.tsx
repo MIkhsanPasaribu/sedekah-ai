@@ -3,7 +3,7 @@
 // Generates a 3-sentence Groq summary for a campaign
 // ============================================================
 
-import { ChatGroq } from "@langchain/groq";
+import { createTaskLlm } from "@/lib/models/factory";
 
 interface CampaignAiSummaryProps {
   name: string;
@@ -21,10 +21,8 @@ async function generateSummary(props: CampaignAiSummaryProps): Promise<string> {
     (collectedAmount / Math.max(targetAmount, 1)) * 100,
   );
 
-  const llm = new ChatGroq({
-    model: "meta-llama/llama-4-scout-17b-16e-instruct",
+  const llm = createTaskLlm("campaign_summary", {
     temperature: 0.7,
-    apiKey: process.env.GROQ_API_KEY,
   });
 
   const res = await llm.invoke([

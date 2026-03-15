@@ -8,7 +8,6 @@
 //   Call 1 — conversational (temp 0.7): generate warm empathetic response for user
 //   Call 2 — structured output (temp 0): reliably extract financial data as JSON
 
-import { ChatGroq } from "@langchain/groq";
 import {
   AIMessage,
   HumanMessage,
@@ -16,7 +15,6 @@ import {
 } from "@langchain/core/messages";
 import { buildAgentMessage } from "@/lib/agent/utils";
 import { sanitizeModelOutput } from "@/lib/agent/utils";
-import { invokeWithRetryAndTimeout } from "@/lib/agent/utils";
 import { z } from "zod";
 import type { SedekahState } from "../state";
 import { getAiRuntimeConfig } from "@/lib/env";
@@ -24,6 +22,7 @@ import {
   hasExplicitAmountSignal,
   parseDonationAmount,
 } from "@/lib/agent/parsers/donation";
+import { invokeTaskWithModelFallback } from "@/lib/models/factory";
 
 function detectDonationIntent(text: string): SedekahState["donorIntent"] {
   const normalized = text.toLowerCase();
@@ -40,11 +39,6 @@ function detectDonationIntent(text: string): SedekahState["donorIntent"] {
 }
 
 // ── LLM instances ────────────────────────────────────────────
-const conversationalLlm = new ChatGroq({
-  model: "meta-llama/llama-4-scout-17b-16e-instruct",
-  temperature: 0.7,
-  apiKey: process.env.GROQ_API_KEY,
-});
 const aiRuntime = getAiRuntimeConfig();
 
 const intakeExtractionSchema = z.object({
@@ -118,12 +112,6 @@ const intakeExtractionSchema = z.object({
     ),
 });
 
-const extractionLlm = new ChatGroq({
-  model: "meta-llama/llama-4-scout-17b-16e-instruct",
-  temperature: 0,
-  apiKey: process.env.GROQ_API_KEY,
-}).withStructuredOutput(intakeExtractionSchema);
-
 // ── System Prompts ────────────────────────────────────────────
 const CONVERSATIONAL_SYSTEM_PROMPT = `Kamu adalah Amil AI SEDEKAH.AI — asisten digital terpercaya untuk zakat dan sedekah.
 
@@ -194,30 +182,40 @@ export async function intakeNode(
 
   // Run both LLM calls in parallel for efficiency
   const [conversationalResponse, extracted] = await Promise.all([
-    invokeWithRetryAndTimeout(
-      () =>
-        conversationalLlm.invoke([
-          new SystemMessage(CONVERSATIONAL_SYSTEM_PROMPT),
-          ...messages,
-        ]),
+    invokeTaskWithModelFallback(
+      "agent_intake_conversational",
       {
+        temperature: 0.7,
         timeoutMs: aiRuntime.llmTimeoutMs,
         maxRetries: aiRuntime.llmMaxRetries,
         initialRetryDelayMs: aiRuntime.llmInitialRetryDelayMs,
         operationName: "intake.conversational_response",
       },
+      (llm) =>
+        llm.invoke([
+          new SystemMessage(CONVERSATIONAL_SYSTEM_PROMPT),
+          ...messages,
+        ]),
     ).catch(
       () =>
         new AIMessage(
           "Assalamu'alaikum. Alhamdulillah, niat baik Anda sangat berarti. Silakan lanjutkan dengan detail kebutuhan donasi Anda agar saya bantu proseskan.",
         ),
     ),
-    invokeWithRetryAndTimeout(() => extractionLlm.invoke(extractionMessages), {
-      timeoutMs: aiRuntime.llmTimeoutMs,
-      maxRetries: aiRuntime.llmMaxRetries,
-      initialRetryDelayMs: aiRuntime.llmInitialRetryDelayMs,
-      operationName: "intake.structured_extraction",
-    }).catch(() => null),
+    invokeTaskWithModelFallback(
+      "agent_intake_extraction",
+      {
+        temperature: 0,
+        timeoutMs: aiRuntime.llmTimeoutMs,
+        maxRetries: aiRuntime.llmMaxRetries,
+        initialRetryDelayMs: aiRuntime.llmInitialRetryDelayMs,
+        operationName: "intake.structured_extraction",
+      },
+      (llm) =>
+        llm
+          .withStructuredOutput(intakeExtractionSchema)
+          .invoke(extractionMessages),
+    ).catch(() => null),
   ]);
 
   const cleanContent =

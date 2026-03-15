@@ -4,16 +4,14 @@
 // Generates personalized Ramadhan nudge using Groq.
 // Caches per user per Ramadhan day in GivingJourney.nudgeMessage.
 
-import { ChatGroq } from "@langchain/groq";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { prisma } from "@/lib/prisma";
 import { getDailyNudge } from "@/lib/utils";
 import { sanitizeCardNarrativeOutput } from "@/lib/agent/utils";
+import { createTaskLlm } from "@/lib/models/factory";
 
-const nudgeLlm = new ChatGroq({
-  model: "meta-llama/llama-4-scout-17b-16e-instruct",
+const nudgeLlm = createTaskLlm("dashboard_daily_nudge", {
   temperature: 0.7,
-  apiKey: process.env.GROQ_API_KEY,
 });
 
 /**

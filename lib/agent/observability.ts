@@ -17,6 +17,11 @@ export interface LlmInvokeMetric {
   timestamp: string;
   operationName: string;
   correlationId: string | null;
+  task: string | null;
+  modelId: string | null;
+  modelTier: string | null;
+  fallbackAttempt: number;
+  isFallback: boolean;
   timeoutMs: number;
   durationMs: number;
   attempts: number;
@@ -39,6 +44,9 @@ interface AgentObservabilityStore {
     failure: number;
     timeoutDetected: number;
     totalRetries: number;
+    fallbackInvocations: number;
+    fallbackSuccess: number;
+    fallbackFailure: number;
   };
   recentAgentStreams: AgentStreamMetric[];
   recentLlmInvocations: LlmInvokeMetric[];
@@ -60,6 +68,9 @@ const store: AgentObservabilityStore = {
     failure: 0,
     timeoutDetected: 0,
     totalRetries: 0,
+    fallbackInvocations: 0,
+    fallbackSuccess: 0,
+    fallbackFailure: 0,
   },
   recentAgentStreams: [],
   recentLlmInvocations: [],
@@ -88,6 +99,9 @@ export function recordAgentStreamMetric(metric: AgentStreamMetric): void {
 export function recordLlmInvokeMetric(metric: LlmInvokeMetric): void {
   store.llmInvoke.total += 1;
   store.llmInvoke.totalRetries += metric.retryCount;
+  if (metric.isFallback) {
+    store.llmInvoke.fallbackInvocations += 1;
+  }
 
   if (metric.timeoutDetected) {
     store.llmInvoke.timeoutDetected += 1;
@@ -95,8 +109,14 @@ export function recordLlmInvokeMetric(metric: LlmInvokeMetric): void {
 
   if (metric.outcome === "success") {
     store.llmInvoke.success += 1;
+    if (metric.isFallback) {
+      store.llmInvoke.fallbackSuccess += 1;
+    }
   } else {
     store.llmInvoke.failure += 1;
+    if (metric.isFallback) {
+      store.llmInvoke.fallbackFailure += 1;
+    }
   }
 
   pushRecent(store.recentLlmInvocations, metric);
@@ -142,6 +162,13 @@ export function getAgentOpsSnapshot(): Record<string, unknown> {
         successRate: llmTotal > 0 ? store.llmInvoke.success / llmTotal : 0,
         avgRetryPerInvoke:
           llmTotal > 0 ? store.llmInvoke.totalRetries / llmTotal : 0,
+        fallbackRate:
+          llmTotal > 0 ? store.llmInvoke.fallbackInvocations / llmTotal : 0,
+        fallbackSuccessRate:
+          store.llmInvoke.fallbackInvocations > 0
+            ? store.llmInvoke.fallbackSuccess /
+              store.llmInvoke.fallbackInvocations
+            : 0,
       },
       tokenStream: {
         streamsWithTokens,

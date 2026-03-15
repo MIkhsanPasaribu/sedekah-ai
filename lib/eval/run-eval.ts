@@ -13,6 +13,7 @@
 
 import { Client } from "langsmith";
 import { evaluate } from "langsmith/evaluation";
+import { getModelForTask } from "@/lib/models/config";
 import { EVAL_DATASET } from "./dataset";
 import type { EvalTestCase } from "./dataset";
 import type { Run, Example } from "langsmith/schemas";
@@ -242,7 +243,7 @@ export async function runEvaluation(
     experimentPrefix: "sedekah-ai",
     metadata: {
       version: "1.0",
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      model: getModelForTask("eval_runner"),
     },
   });
 

@@ -9,9 +9,9 @@
 // This prevents the full 7-node pipeline from running when the user
 // just wants to ask a question or say "Assalamu'alaikum".
 
-import { ChatGroq } from "@langchain/groq";
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
+import { createTaskLlm } from "@/lib/models/factory";
 import type { SedekahState } from "../state";
 
 const intentSchema = z.object({
@@ -23,10 +23,8 @@ const intentSchema = z.object({
   confidence: z.number().min(0).max(1).describe("Confidence level 0-1"),
 });
 
-const classifierLlm = new ChatGroq({
-  model: "meta-llama/llama-4-scout-17b-16e-instruct",
+const classifierLlm = createTaskLlm("agent_supervisor_classifier", {
   temperature: 0,
-  apiKey: process.env.GROQ_API_KEY,
 }).withStructuredOutput(intentSchema);
 
 const CLASSIFIER_PROMPT = `Kamu adalah classifier intent untuk aplikasi donasi SEDEKAH.AI.

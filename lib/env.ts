@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { AiModelCatalog } from "@/lib/models/types";
+import { SUPPORTED_GROQ_MODELS } from "@/lib/models/types";
 
 const appUrlSchema = z
   .string()
@@ -29,6 +31,14 @@ export interface AiRuntimeConfig {
   enableTokenStream: boolean;
 }
 
+const groqModelSchema = z.enum(SUPPORTED_GROQ_MODELS);
+
+const DEFAULT_AI_MODEL_CATALOG: AiModelCatalog = {
+  reasoning: "llama-3.3-70b-versatile",
+  balanced: "meta-llama/llama-4-scout-17b-16e-instruct",
+  economy: "qwen/qwen3-32b",
+};
+
 function parseIntegerEnv(
   name: string,
   fallback: number,
@@ -46,6 +56,27 @@ function parseIntegerEnv(
   }
 
   return parsed;
+}
+
+function parseGroqModelEnv(
+  envName: string,
+  fallback: AiModelCatalog[keyof AiModelCatalog],
+): AiModelCatalog[keyof AiModelCatalog] {
+  const rawValue = process.env[envName]?.trim();
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const parsed = groqModelSchema.safeParse(rawValue);
+  if (!parsed.success) {
+    throw new Error(
+      `${envName} tidak valid. Gunakan salah satu: ${SUPPORTED_GROQ_MODELS.join(
+        ", ",
+      )}`,
+    );
+  }
+
+  return parsed.data;
 }
 
 export function getMayarRuntimeConfig(): MayarRuntimeConfig {
@@ -119,6 +150,23 @@ export function getAiRuntimeConfig(): AiRuntimeConfig {
       max: 50,
     }),
     enableTokenStream: process.env.AI_ENABLE_TOKEN_STREAM === "true",
+  };
+}
+
+export function getAiModelRuntimeConfig(): AiModelCatalog {
+  return {
+    reasoning: parseGroqModelEnv(
+      "AI_MODEL_REASONING",
+      DEFAULT_AI_MODEL_CATALOG.reasoning,
+    ),
+    balanced: parseGroqModelEnv(
+      "AI_MODEL_BALANCED",
+      DEFAULT_AI_MODEL_CATALOG.balanced,
+    ),
+    economy: parseGroqModelEnv(
+      "AI_MODEL_ECONOMY",
+      DEFAULT_AI_MODEL_CATALOG.economy,
+    ),
   };
 }
 

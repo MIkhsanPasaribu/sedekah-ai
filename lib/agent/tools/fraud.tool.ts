@@ -4,11 +4,11 @@
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { ChatGroq } from "@langchain/groq";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { FraudScore } from "../state";
 import { invokeWithRetryAndTimeout } from "@/lib/agent/utils";
 import { getAiRuntimeConfig } from "@/lib/env";
+import { invokeTaskWithModelFallback } from "@/lib/models/factory";
 
 const aiRuntime = getAiRuntimeConfig();
 
@@ -32,25 +32,19 @@ const analyzeFraudSchema = z.object({
     .describe("Daftar kampanye yang akan dianalisis"),
 });
 
-const narrativeAnalysisLlm = new ChatGroq({
-  model: "meta-llama/llama-4-scout-17b-16e-instruct",
-  temperature: 0,
-  apiKey: process.env.GROQ_API_KEY,
-}).withStructuredOutput(
-  z.object({
-    manipulationScore: z
-      .number()
-      .min(0)
-      .max(100)
-      .describe(
-        "Skor manipulasi 0-100: 0=tidak ada manipulasi (terpercaya), 100=sangat manipulatif",
-      ),
-    detectedTechniques: z
-      .array(z.string())
-      .describe("Teknik manipulasi yang terdeteksi"),
-    explanation: z.string().describe("Penjelasan singkat analisis narasi"),
-  }),
-);
+const narrativeAnalysisSchema = z.object({
+  manipulationScore: z
+    .number()
+    .min(0)
+    .max(100)
+    .describe(
+      "Skor manipulasi 0-100: 0=tidak ada manipulasi (terpercaya), 100=sangat manipulatif",
+    ),
+  detectedTechniques: z
+    .array(z.string())
+    .describe("Teknik manipulasi yang terdeteksi"),
+  explanation: z.string().describe("Penjelasan singkat analisis narasi"),
+});
 
 /**
  * Tool untuk menganalisis trust score kampanye.
@@ -120,22 +114,26 @@ export const analyzeFraudTool = tool(
         const ruleBasedNarrativeScore = Math.max(20, 90 - narrativeFlags * 15);
 
         // LLM-based narrative analysis (temp=0 for determinism, fallback to rule-based)
-        const llmNarrativeResult = await invokeWithRetryAndTimeout(
-          () =>
-            narrativeAnalysisLlm.invoke([
-              new SystemMessage(
-                "Anda adalah analis penipuan donasi online. Analisis apakah teks kampanye menggunakan teknik manipulasi psikologis seperti FOMO, urgensi palsu, atau klaim berlebihan. Berikan skor manipulasi 0-100 di mana 0=tidak ada manipulasi (terpercaya) dan 100=sangat manipulatif (berisiko tinggi).",
-              ),
-              new HumanMessage(
-                `Nama kampanye: ${campaign.name}\n\nDeskripsi: ${campaign.description}`,
-              ),
-            ]),
+        const llmNarrativeResult = await invokeTaskWithModelFallback(
+          "agent_fraud_narrative",
           {
+            temperature: 0,
             timeoutMs: aiRuntime.llmTimeoutMs,
             maxRetries: aiRuntime.llmMaxRetries,
             initialRetryDelayMs: aiRuntime.llmInitialRetryDelayMs,
             operationName: "fraud.narrative_analysis",
           },
+          (llm) =>
+            llm
+              .withStructuredOutput(narrativeAnalysisSchema)
+              .invoke([
+                new SystemMessage(
+                  "Anda adalah analis penipuan donasi online. Analisis apakah teks kampanye menggunakan teknik manipulasi psikologis seperti FOMO, urgensi palsu, atau klaim berlebihan. Berikan skor manipulasi 0-100 di mana 0=tidak ada manipulasi (terpercaya) dan 100=sangat manipulatif (berisiko tinggi).",
+                ),
+                new HumanMessage(
+                  `Nama kampanye: ${campaign.name}\n\nDeskripsi: ${campaign.description}`,
+                ),
+              ]),
         ).catch(() => null);
 
         // Hybrid: 40% rule-based + 60% LLM (manipulationScore inverted to trust scale)

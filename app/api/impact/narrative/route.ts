@@ -5,14 +5,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { ChatGroq } from "@langchain/groq";
 import { prisma } from "@/lib/prisma";
 import { formatRupiah } from "@/lib/utils";
-import {
-  invokeWithRetryAndTimeout,
-  sanitizeCardNarrativeOutput,
-} from "@/lib/agent/utils";
+import { sanitizeCardNarrativeOutput } from "@/lib/agent/utils";
 import { getAiRuntimeConfig } from "@/lib/env";
+import { invokeTaskWithModelFallback } from "@/lib/models/factory";
 
 export const runtime = "nodejs";
 
@@ -51,11 +48,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const llm = new ChatGroq({
-    model: "meta-llama/llama-4-scout-17b-16e-instruct",
-    temperature: 0.7,
-    apiKey: process.env.GROQ_API_KEY,
-  });
   const aiRuntime = getAiRuntimeConfig();
 
   const donorName = donation.user?.name ?? "Donatur";
@@ -71,8 +63,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     "Semoga Allah menerima amal ini, melipatgandakan pahalanya, dan menghadirkan keberkahan berkelanjutan bagi semua pihak.",
   ].join("\n\n");
 
-  const narrativeResponse = await invokeWithRetryAndTimeout(
-    () =>
+  const narrativeResponse = await invokeTaskWithModelFallback(
+    "dashboard_impact_narrative",
+    {
+      temperature: 0.7,
+      timeoutMs: aiRuntime.llmTimeoutMs,
+      maxRetries: aiRuntime.llmMaxRetries,
+      initialRetryDelayMs: aiRuntime.llmInitialRetryDelayMs,
+      operationName: "impact.narrative_generation",
+    },
+    (llm) =>
       llm.invoke([
         {
           role: "system",
@@ -84,12 +84,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           content: `Nama donatur: ${donorName}\nJenis donasi: ${typeLabel}\nKampanye: ${campaignName}\nKategori: ${category}\nNominal: ${amount}`,
         },
       ]),
-    {
-      timeoutMs: aiRuntime.llmTimeoutMs,
-      maxRetries: aiRuntime.llmMaxRetries,
-      initialRetryDelayMs: aiRuntime.llmInitialRetryDelayMs,
-      operationName: "impact.narrative_generation",
-    },
   ).catch(() => null);
 
   const narrativeRaw = narrativeResponse

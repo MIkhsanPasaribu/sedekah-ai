@@ -102,6 +102,11 @@ export interface LlmInvokeRuntimeOptions {
   backoffMultiplier?: number;
   operationName?: string;
   correlationId?: string;
+  task?: string;
+  modelId?: string;
+  modelTier?: string;
+  fallbackAttempt?: number;
+  isFallback?: boolean;
 }
 
 export async function invokeWithRetryAndTimeout<T>(
@@ -121,6 +126,11 @@ export async function invokeWithRetryAndTimeout<T>(
         timestamp: new Date().toISOString(),
         operationName: options.operationName ?? "unknown_operation",
         correlationId: options.correlationId ?? null,
+        task: options.task ?? null,
+        modelId: options.modelId ?? null,
+        modelTier: options.modelTier ?? null,
+        fallbackAttempt: options.fallbackAttempt ?? 0,
+        isFallback: options.isFallback ?? false,
         timeoutMs: options.timeoutMs,
         durationMs: Date.now() - invokeStartedAtMs,
         attempts,
@@ -145,6 +155,11 @@ export async function invokeWithRetryAndTimeout<T>(
           timestamp: new Date().toISOString(),
           operationName: options.operationName ?? "unknown_operation",
           correlationId: options.correlationId ?? null,
+          task: options.task ?? null,
+          modelId: options.modelId ?? null,
+          modelTier: options.modelTier ?? null,
+          fallbackAttempt: options.fallbackAttempt ?? 0,
+          isFallback: options.isFallback ?? false,
           timeoutMs: options.timeoutMs,
           durationMs: Date.now() - invokeStartedAtMs,
           attempts,

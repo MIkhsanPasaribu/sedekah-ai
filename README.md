@@ -35,7 +35,7 @@ Lacak dampak nyata donasi: estimasi penerima manfaat, ROI kebaikan, dan mileston
 | Styling         | Tailwind CSS 4 dengan custom brand tokens         |
 | Database        | Supabase (PostgreSQL) + Prisma ORM                |
 | Auth            | Supabase Auth (Google OAuth + Email/Password)     |
-| LLM             | Groq — Llama 3.3 70B Versatile                    |
+| LLM             | Groq — Multi-model task routing (Llama + Qwen)    |
 | Agent Framework | LangGraph (StateGraph) via `@langchain/langgraph` |
 | Payment         | Mayar API (sandbox + production)                  |
 
@@ -43,7 +43,7 @@ Lacak dampak nyata donasi: estimasi penerima manfaat, ROI kebaikan, dan mileston
 
 ## 🤖 Agent Architecture
 
-```
+```text
 INTAKE → CALCULATE → RESEARCH → FRAUD_DETECTOR → RECOMMEND → PAYMENT_EXECUTOR → IMPACT_TRACKER
 ```
 
@@ -51,13 +51,20 @@ INTAKE → CALCULATE → RESEARCH → FRAUD_DETECTOR → RECOMMEND → PAYMENT_E
 
 - **Human-in-the-loop** — interrupt sebelum pembayaran
 - **6 AI Tools** — Zakat calculator, Mayar invoice, Campaign search, Fraud analysis, Islamic context
-- **Groq LLM** — Llama 3.3 70B untuk respons empatis dalam Bahasa Indonesia
+- **Groq Multi-Model** — task-based routing + fallback chain antar model
+
+### Model Strategy
+
+- Task kritikal (extraction, recommendation, fraud) diprioritaskan ke tier `reasoning`
+- Task naratif ringan (nudge, campaign summary) diprioritaskan ke tier `economy`
+- Fallback otomatis per task: `primary -> secondary -> tertiary` sesuai tier mapping
+- Observability menyimpan metadata invoke: `task`, `modelId`, `modelTier`, `isFallback`
 
 ---
 
 ## 📁 Project Structure
 
-```
+```text
 sedekah-ai/
 ├── app/                              # Next.js App Router
 │   ├── (auth)/                       # Auth (login, callback)
@@ -142,6 +149,11 @@ DATABASE_URL=your_postgresql_connection_string
 # Groq LLM
 GROQ_API_KEY=your_groq_api_key
 
+# AI Model Catalog (optional overrides)
+AI_MODEL_REASONING=llama-3.3-70b-versatile
+AI_MODEL_BALANCED=meta-llama/llama-4-scout-17b-16e-instruct
+AI_MODEL_ECONOMY=qwen/qwen3-32b
+
 # Mayar Payment
 MAYAR_API_KEY=your_mayar_api_key
 MAYAR_SANDBOX=true
@@ -200,9 +212,8 @@ MIT License — see [LICENSE](LICENSE) for details.
 ## 🧪 Quality Assurance
 
 - QA Test Cases: [docs/QA-TEST-CASE-PLAYBOOK.md](docs/QA-TEST-CASE-PLAYBOOK.md)
+- AI Model Strategy: [docs/AI-MODEL-STRATEGY.md](docs/AI-MODEL-STRATEGY.md)
 
 ---
 
-<p align="center">
-  Dibuat dengan 💚 untuk umat — <strong>SEDEKAH.AI</strong> © 2026
-</p>
+Dibuat dengan 💚 untuk umat — SEDEKAH.AI © 2026
